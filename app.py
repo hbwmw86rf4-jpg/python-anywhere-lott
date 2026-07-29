@@ -205,9 +205,9 @@ init_db()
 
 @app.before_request
 def require_unlock():
-    """Gate the whole app behind a single passcode. Only the unlock screen and
-    static assets are reachable while locked."""
-    if request.endpoint in ('unlock', 'static'):
+    """Gate the whole app behind a single passcode. Only the unlock screen,
+    static assets, and webhook deployments are reachable while locked."""
+    if request.endpoint in ('unlock', 'static', 'github_webhook'):
         return
     if not session.get('app_unlocked'):
         return redirect(url_for('unlock'))
