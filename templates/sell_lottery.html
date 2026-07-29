@@ -7,14 +7,18 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="/static/scanner.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
-        .btn { padding: 15px 30px; font-size: 1.2em; cursor: pointer; text-decoration: none; display: inline-block; border: none; border-radius: 6px; }
+        body { font-family: Arial, sans-serif; padding: 15px; max-width: 850px; margin: auto; background: #f8f9fa; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 15px; background: white; border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 12px; text-align: center; }
+        th { background: #f1f3f5; font-weight: bold; color: #495057; }
         .mode-toggle { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
-        .mode-toggle button { padding: 10px 18px; font-size: 1em; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .mode-toggle button { padding: 10px 18px; font-size: 0.95em; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .mode-toggle button.active { background: #007bff; color: white; }
         .hint { color: #555; font-size: 0.9em; }
+        
+        .scan-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 440px; margin: 12px auto 0; }
+        .scan-action-btn { padding: 12px 8px; font-size: 0.95em; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; text-align: center; width: 100%; box-sizing: border-radius; margin: 0; }
+
         /* Scanning frame overlay */
         .scan-frame-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
         .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 140px; border: 2px solid #00ff00; border-radius: 6px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
@@ -28,11 +32,11 @@
     </style>
 </head>
 <body>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <a href="/" class="btn" style="background-color: #6c757d; color: white;">← Back to Shift Tracker</a>
-        <div>
-            <span style="font-weight: bold; color: #555; margin-right: 12px;">👤 {{ session.get('cashier_name') }}</span>
-            <a href="/logout" style="background-color: #dc3545; color: white; padding: 8px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">Log Out</a>
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: white; padding: 12px 16px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+        <a href="/" style="background-color: #6c757d; color: white; padding: 8px 14px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 0.9em;">← Back to Shift Tracker</a>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: bold; color: #555; font-size: 0.9em;">👤 {{ session.get('cashier_name') }}</span>
+            <a href="/logout" style="background-color: #dc3545; color: white; padding: 6px 12px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 0.85em;">Log Out</a>
         </div>
     </div>
 
@@ -66,7 +70,7 @@
     </script>
     {% endif %}
 
-    <h2 style="text-align: center;">Sell Lottery</h2>
+    <h2 style="text-align: center; font-size: 1.5em; margin: 10px 0;">Sell Lottery</h2>
 
     <!-- Scan mode toggle -->
     <div class="mode-toggle">
@@ -86,16 +90,18 @@
     </p>
 
     <!-- Scan input -->
-    <div style="background: #e9ecef; padding: 20px; text-align: center; border-radius: 10px;">
+    <div style="background: white; padding: 20px; text-align: center; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
         <form id="scanForm" method="POST">
-            <label style="font-size: 1.2em; font-weight: bold;">Scan Ticket:</label><br>
-            <input type="text" name="barcode" id="scanBarcode" required autofocus placeholder="Scan Barcode Here…" style="font-size: 1.5em; padding: 10px; width: 60%; margin: 15px 0;">
-            <br>
-            <button type="submit" class="btn" style="background-color: #007bff; color: white;">Add to Cart</button>
-        </form>
-        <button type="button" id="sellCamBtn" class="btn" style="background-color: #0056b3; color: white; padding: 10px 20px; font-size: 1em;">📷 Scan with Camera</button>
-        <form method="POST" style="display:inline;">
-            <button type="submit" name="undo_last" value="1" class="btn" style="background-color: #ffc107; color: #333; padding: 10px 20px; font-size: 1em;">↩ Undo Last Scan</button>
+            <label style="font-size: 1.2em; font-weight: bold;">Scan Ticket Barcode:</label><br>
+            <input type="text" name="barcode" id="scanBarcode" required autofocus placeholder="Scan Barcode Here…" style="font-size: 1.3em; padding: 12px; width: 85%; max-width: 380px; margin: 12px 0; border: 2px solid #007bff; border-radius: 6px; text-align: center;">
+            
+            <div class="scan-action-grid">
+                <button type="submit" class="scan-action-btn" style="background-color: #007bff; color: white;">➕ Add to Cart</button>
+                <button type="button" id="sellCamBtn" class="scan-action-btn" style="background-color: #0056b3; color: white;">📷 Scan Camera</button>
+                <form method="POST" style="margin: 0; display: contents;">
+                    <button type="submit" name="undo_last" value="1" class="scan-action-btn" style="background-color: #ffc107; color: #333;">↩ Undo Scan</button>
+                </form>
+            </div>
         </form>
         <div id="sellReader" style="display:none; width:100%; max-width:360px; margin:12px auto 0; position: relative;"></div>
     </div>

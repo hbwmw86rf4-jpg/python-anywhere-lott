@@ -79,38 +79,54 @@
     {% endfor %}
 </div>
 
-<!-- Backroom Stock (feedback for receiving — kept next to Receive) -->
+<!-- Backroom Stock Inventory Table -->
 <div class="section">
     <h2>Backroom Stock Inventory</h2>
-    {% for p in backroom %}
-    {% if p.status == 'DELETED' %}
-    <div class="slot" style="background:#fbeaea; opacity:0.75;">
-        <span style="text-decoration: line-through;"><strong>{{ p.name }}</strong> (Pack: <code>{{ p.pack_id }}</code>)</span>
-        <span style="color:#dc3545; font-weight:bold; margin-left:10px;">🗑 DELETED {{ p.deleted_at }}</span>
-        <span style="color:#666; font-size:0.85em;"> — re-scan this pack to restore it</span>
-    </div>
-    {% else %}
-    <div class="slot" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-        <div>
-            <strong style="font-size: 1.1em; color: #111;">{{ p.name }}</strong>
-            <span style="margin-left: 8px; font-size: 0.95em;">Pack ID: <code style="background: #f1f3f5; padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #0056b3;">{{ p.pack_id }}</code></span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <form action="/activate_pack" method="POST" style="display:flex; align-items:center; gap:6px;">
-                <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
-                <input type="number" name="slot_number" placeholder="Slot #" required style="width: 75px; padding: 6px 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;">
-                <button type="submit" style="padding: 6px 12px; font-size: 14px; font-weight: bold; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer;">Activate</button>
-            </form>
-            <form action="/delete_pack" method="POST" style="display:inline;" onsubmit="return confirm('Delete pack {{ p.pack_id }} from backroom stock? It stays visible struck-through for 6 weeks.');">
-                <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
-                <button type="submit" style="padding: 6px 12px; font-size: 14px; font-weight: bold; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
-            </form>
-        </div>
-    </div>
-    {% endif %}
-    {% else %}
-    <p style="color:#666;">No stock currently in backroom.</p>
-    {% endfor %}
+    <table>
+        <thead>
+            <tr>
+                <th>Game Name</th>
+                <th>Pack ID</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in backroom %}
+            {% if p.status == 'DELETED' %}
+            <tr style="background:#fbeaea; opacity:0.8;">
+                <td><span style="text-decoration: line-through;">{{ p.name }}</span></td>
+                <td><code style="background:#f1f3f5; padding:3px 8px; border-radius:4px; font-weight:bold;">{{ p.pack_id }}</code></td>
+                <td>
+                    <span style="color:#dc3545; font-weight:bold;">🗑 DELETED {{ p.deleted_at }}</span>
+                    <span style="color:#666; font-size:0.85em;"> — re-scan to restore</span>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td><strong style="font-size: 1.05em; color: #111;">{{ p.name }}</strong></td>
+                <td><code style="background:#f1f3f5; padding:4px 8px; border-radius:4px; color:#0056b3; font-weight:bold; font-size:1.05em;">{{ p.pack_id }}</code></td>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <form action="/activate_pack" method="POST" style="display:flex; align-items:center; gap:6px;">
+                            <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
+                            <input type="number" name="slot_number" placeholder="Slot #" required style="width: 75px; padding: 6px 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;">
+                            <button type="submit" style="padding: 6px 14px; font-size: 14px; font-weight: bold; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer;">Activate</button>
+                        </form>
+                        <form action="/delete_pack" method="POST" style="display:inline;" onsubmit="return confirm('Delete pack {{ p.pack_id }} from backroom stock?');">
+                            <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
+                            <button type="submit" style="padding: 6px 12px; font-size: 14px; font-weight: bold; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
+            {% else %}
+            <tr>
+                <td colspan="3" style="text-align: center; color: #666; padding: 15px;">No stock currently in backroom.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 <!-- Receive New Stock -->
