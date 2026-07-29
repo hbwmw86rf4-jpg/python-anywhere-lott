@@ -22,6 +22,8 @@
     // Duplicate-scan guard: ignore the exact same barcode fired within 1.5 seconds.
     var lastScan = { code: null, ts: 0 };
 
+    var sharedAudioCtx = null;
+
     /**
      * Synthesize a short, crisp audio scan beep using Web Audio API.
      */
@@ -29,18 +31,23 @@
         try {
             var AudioContextClass = window.AudioContext || window.webkitAudioContext;
             if (!AudioContextClass) return;
-            var ctx = new AudioContextClass();
+            if (!sharedAudioCtx) {
+                sharedAudioCtx = new AudioContextClass();
+            }
+            if (sharedAudioCtx.state === 'suspended') {
+                sharedAudioCtx.resume();
+            }
+            var ctx = sharedAudioCtx;
             var osc = ctx.createOscillator();
             var gain = ctx.createGain();
             osc.type = 'sine';
             osc.frequency.setValueAtTime(880, ctx.currentTime);
-            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
             osc.connect(gain);
             gain.connect(ctx.destination);
             osc.start();
             osc.stop(ctx.currentTime + 0.12);
-            setTimeout(function () { ctx.close(); }, 200);
         } catch (e) {
             /* ignore audio restriction if user hasn't interacted */
         }
@@ -355,14 +362,14 @@
             modal.style.display = 'none';
         };
 
-        // Numpad Key Clicks
+        // Instant 0ms Numpad Key Event Handling
         var keys = modal.querySelectorAll('.lott-np-key');
         keys.forEach(function (k) {
-            k.onclick = function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                playScanBeep();
-                triggerHaptic();
+            var handlePress = function (e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
 
                 var val = k.getAttribute('data-key');
                 if (mode === 'guided') {
@@ -397,6 +404,16 @@
                     }
                 }
                 updateActiveInputHighlight();
+            };
+
+            var handled = false;
+            k.onpointerdown = function (e) {
+                handled = true;
+                handlePress(e);
+            };
+            k.onclick = function (e) {
+                if (!handled) handlePress(e);
+                handled = false;
             };
         });
 
