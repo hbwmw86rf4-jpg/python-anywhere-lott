@@ -19,6 +19,49 @@
 (function () {
     'use strict';
 
+    // Automatic Scroll & Focus Position Preservation across reloads and form submits
+    (function () {
+        try {
+            var savedY = sessionStorage.getItem('lott_saved_scroll_y');
+            var savedFocusId = sessionStorage.getItem('lott_saved_focus_id');
+            
+            if (savedY !== null && savedY !== undefined) {
+                var targetY = parseInt(savedY, 10);
+                sessionStorage.removeItem('lott_saved_scroll_y');
+                sessionStorage.removeItem('lott_saved_focus_id');
+                if (!isNaN(targetY) && targetY > 0) {
+                    var restore = function () {
+                        window.scrollTo(0, targetY);
+                        if (savedFocusId) {
+                            var focusEl = document.getElementById(savedFocusId);
+                            if (focusEl) {
+                                try { focusEl.focus(); } catch (e) {}
+                            }
+                        }
+                    };
+                    if (document.readyState === 'complete') {
+                        restore();
+                    } else {
+                        window.addEventListener('load', restore);
+                        setTimeout(restore, 50);
+                    }
+                }
+            }
+
+            var savePos = function () {
+                try {
+                    sessionStorage.setItem('lott_saved_scroll_y', window.scrollY || window.pageYOffset || 0);
+                    if (document.activeElement && document.activeElement.id) {
+                        sessionStorage.setItem('lott_saved_focus_id', document.activeElement.id);
+                    }
+                } catch (e) {}
+            };
+
+            window.addEventListener('beforeunload', savePos);
+            document.addEventListener('submit', savePos, true);
+        } catch (e) {}
+    })();
+
     // Duplicate-scan guard: ignore the exact same barcode fired within 1.5 seconds.
     var lastScan = { code: null, ts: 0 };
 
