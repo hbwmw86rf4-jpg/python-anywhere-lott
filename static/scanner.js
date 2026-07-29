@@ -3,13 +3,14 @@
  *
  * Features:
  *   - Dual Detection Engine:
- *       1. Native Web BarcodeDetector API (Primary, 15ms hardware-accelerated decoding)
- *       2. Html5Qrcode / WASM engine (Fallback for older devices/browsers)
- *   - Full HD 1080p video constraints for high-density 24-digit ITF & Code 128 barcodes
+ *       1. Native Web BarcodeDetector API (Hardware-accelerated decoding)
+ *       2. Html5Qrcode / ZXing engine (Fallback for unsupported platforms/formats)
+ *   - Safe Format Probing: Verifies browser supported enum formats before instantiating native detector (prevents TypeError crashes on iOS Safari)
+ *   - Full HD 1080p video constraints with automatic fallback for low-end camera streams
  *   - Continuous autofocus and exposure compensation
  *   - Hardware torch / flashlight control (if device camera supports it)
  *   - Web Audio synthesizer scan beep + haptic vibration feedback
- *   - ROI target frame overlay with animated scan line
+ *   - Dynamic rectangular ROI target frame overlay
  *   - Duplicate scan protection & race-condition-free form submission
  */
 
@@ -69,7 +70,7 @@
             .lott-scan-frame {
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
-                width: 82%; height: 55%; max-width: 320px; max-height: 180px;
+                width: 85%; height: 50%; max-width: 320px; max-height: 160px;
                 border: 2px solid #00ff00; border-radius: 8px;
                 box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
                 transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -243,8 +244,36 @@
             }
         }
 
-        // Engine 1: Native BarcodeDetector API (Fastest hardware acceleration)
-        function startNativeScanner(stream) {
+        // Engine 1: Native BarcodeDetector API (Safe instantiation with format check)
+        async function startNativeScanner(stream) {
+            var wantedFormats = ['code_128', 'itf', 'code_39', 'pdf417', 'data_matrix', 'upc_a', 'upc_e', 'ean_13', 'qr_code'];
+            var safeFormats = [];
+            var barcodeDetector = null;
+
+            if ('BarcodeDetector' in window) {
+                try {
+                    if (typeof window.BarcodeDetector.getSupportedFormats === 'function') {
+                        var avail = await window.BarcodeDetector.getSupportedFormats();
+                        safeFormats = wantedFormats.filter(function (f) { return avail.indexOf(f) !== -1; });
+                    } else {
+                        safeFormats = ['code_128', 'code_39', 'qr_code'];
+                    }
+
+                    if (safeFormats.length > 0) {
+                        barcodeDetector = new window.BarcodeDetector({ formats: safeFormats });
+                    }
+                } catch (e) {
+                    console.warn('Native BarcodeDetector init failed, falling back:', e);
+                }
+            }
+
+            // Fallback if native detector couldn't be initialized
+            if (!barcodeDetector) {
+                if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+                startHtml5QrcodeFallback();
+                return;
+            }
+
             reader.innerHTML = '';
             reader.style.position = 'relative';
             reader.style.overflow = 'hidden';
@@ -263,9 +292,6 @@
 
             var track = stream.getVideoTracks()[0];
             setupTorch(track);
-
-            var formats = ['itf', 'code_128', 'code_39', 'pdf417', 'data_matrix', 'upc_a', 'upc_e', 'ean_13', 'qr_code'];
-            var barcodeDetector = new window.BarcodeDetector({ formats: formats });
 
             function scanFrame() {
                 if (!running || !activeVideo) return;
@@ -298,11 +324,12 @@
                 activeDetectorLoop = requestAnimationFrame(scanFrame);
             }).catch(function (err) {
                 console.error('Video play error:', err);
+                if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
                 startHtml5QrcodeFallback();
             });
         }
 
-        // Engine 2: Html5Qrcode Fallback Scanner (High HD resolution config)
+        // Engine 2: Html5Qrcode Engine (High HD resolution & dynamic ROI box)
         function startHtml5QrcodeFallback() {
             if (typeof Html5Qrcode === 'undefined') {
                 reader.innerHTML = '<p style="color:#b00; padding:10px;">Scanner library missing. Please reload page.</p>';
@@ -327,8 +354,12 @@
             }
 
             var config = {
-                fps: 24,
-                qrbox: { width: 300, height: 160 },
+                fps: 25,
+                qrbox: function (viewfinderWidth, viewfinderHeight) {
+                    var width = Math.floor(viewfinderWidth * 0.85);
+                    var height = Math.floor(viewfinderHeight * 0.45);
+                    return { width: Math.max(width, 240), height: Math.max(height, 120) };
+                },
                 videoConstraints: {
                     facingMode: 'environment',
                     width: { ideal: 1920, min: 1280 },
@@ -360,8 +391,22 @@
                 running = true;
                 btn.textContent = '✋ Stop Camera';
             }).catch(function (err) {
-                reader.innerHTML = '<p style="color:#b00; padding:10px;">Camera access error: ' + err +
-                    '. Enable camera permissions in browser settings.</p>';
+                console.warn('Html5Qrcode HD constraints failed, retrying basic constraints:', err);
+                // Fallback to basic camera constraints if device rejected HD constraints
+                html5QrInstance.start(
+                    { facingMode: 'environment' },
+                    { fps: 20, qrbox: { width: 280, height: 140 } },
+                    function (decodedText) {
+                        if (running) handleSuccessfulScan(decodedText);
+                    },
+                    function () {}
+                ).then(function () {
+                    running = true;
+                    btn.textContent = '✋ Stop Camera';
+                }).catch(function (err2) {
+                    reader.innerHTML = '<p style="color:#b00; padding:10px;">Camera access error: ' + err2 +
+                        '. Enable camera permissions in browser settings.</p>';
+                });
             });
         }
 
@@ -374,21 +419,20 @@
 
             reader.style.display = 'block';
 
-            // High HD Video Constraints
-            var constraints = {
-                video: {
-                    facingMode: { ideal: 'environment' },
-                    width: { ideal: 1920, min: 1280 },
-                    height: { ideal: 1080, min: 720 },
-                    advanced: [
-                        { focusMode: 'continuous' },
-                        { exposureMode: 'continuous' }
-                    ]
-                }
-            };
-
-            // Check if Native BarcodeDetector API is present & supports lottery formats
+            // Check if Native BarcodeDetector API is present
             if ('BarcodeDetector' in window) {
+                var constraints = {
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920, min: 1280 },
+                        height: { ideal: 1080, min: 720 },
+                        advanced: [
+                            { focusMode: 'continuous' },
+                            { exposureMode: 'continuous' }
+                        ]
+                    }
+                };
+
                 navigator.mediaDevices.getUserMedia(constraints).then(function (stream) {
                     running = true;
                     startNativeScanner(stream);
