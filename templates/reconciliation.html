@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shift Reconciliation Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1100px; margin: auto; background: #f8f9fa; color: #333; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .topbar h1 { margin: 0; font-size: 1.8em; }
+        .btn { display: inline-block; padding: 10px 16px; text-decoration: none; border-radius: 6px; font-weight: bold; color: white; border: none; cursor: pointer; }
+        .btn-pdf { background: #17a2b8; }
+        .btn-pdf:hover { background: #138496; }
+        .btn-back { background: #6c757d; }
+        .btn-back:hover { background: #5a6268; }
+        
+        .controls-card { background: white; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+        .sort-group { display: flex; align-items: center; gap: 10px; }
+        .sort-select { padding: 9px 14px; font-size: 15px; font-weight: bold; border: 2px solid #007bff; border-radius: 6px; background: white; color: #007bff; cursor: pointer; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 18px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 5px solid #007bff; }
+        .stat-card.green { border-left-color: #28a745; }
+        .stat-card.orange { border-left-color: #e8590c; }
+        .stat-label { font-size: 13px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 6px; }
+        .stat-value { font-size: 1.8em; font-weight: bold; color: #111; }
+        
+        .denom-bar { background: white; padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .denom-bar h3 { margin-top: 0; margin-bottom: 12px; font-size: 1.1em; color: #495057; }
+        .denom-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+        .denom-chip { background: #e9ecef; padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: bold; color: #343a40; display: flex; gap: 8px; align-items: center; }
+        .denom-badge { background: #007bff; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+        .table-card { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; margin-bottom: 25px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #e9ecef; }
+        th { background: #f1f3f5; font-weight: bold; color: #495057; position: sticky; top: 0; }
+        tr:hover { background: #f8f9fa; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .price-tag { font-weight: bold; color: #2e7d32; }
+        .slot-badge { background: #0056b3; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        
+        .sign-block { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+        .sign-line { flex: 1; min-width: 240px; border-top: 2px solid #333; padding-top: 8px; font-weight: bold; text-align: center; color: #555; margin-top: 40px; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div>
+            <h1>📊 Shift Reconciliation Report</h1>
+            <div style="font-size: 13px; color: #666; margin-top: 4px;">
+                Generated: {{ timestamp }} | Logged as: <strong>{{ session.get('cashier_name', 'Staff') }}</strong>
+            </div>
+        </div>
+        <div>
+            <a href="/" class="btn btn-back">⬅ Back to Shift Tracker</a>
+        </div>
+    </div>
+
+    <!-- Sorting Controls & PDF Export -->
+    <div class="controls-card">
+        <form method="GET" action="/reconciliation" class="sort-group" id="sortForm">
+            <label for="sort_by" style="font-weight: bold;">Sort Report By:</label>
+            <select name="sort_by" id="sort_by" class="sort-select" onchange="document.getElementById('sortForm').submit();">
+                <option value="slot" {{ 'selected' if sort_by == 'slot' else '' }}>📍 Dispenser Slot Number</option>
+                <option value="price" {{ 'selected' if sort_by == 'price' else '' }}>💵 Price per Ticket (High to Low)</option>
+                <option value="sales_rank" {{ 'selected' if sort_by == 'sales_rank' else '' }}>🏆 Sales Rank per Denomination</option>
+            </select>
+        </form>
+        <div>
+            <a href="/reconciliation/pdf?sort_by={{ sort_by }}" class="btn btn-pdf">📄 Download PDF Report</a>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="stats-grid">
+        <div class="stat-card green">
+            <div class="stat-label">Total Shift Revenue</div>
+            <div class="stat-value">${{ "%.2f"|format(total_revenue) }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Tickets Sold</div>
+            <div class="stat-value">{{ total_tickets_sold }}</div>
+        </div>
+        <div class="stat-card orange">
+            <div class="stat-label">Active Dispenser Slots</div>
+            <div class="stat-value">{{ pack_count }}</div>
+        </div>
+    </div>
+
+    <!-- Denomination Sales Summary -->
+    <div class="denom-bar">
+        <h3>Sales Rank by Ticket Denomination</h3>
+        <div class="denom-chips">
+            {% for d in denom_summary %}
+            <div class="denom-chip">
+                <span>${{ "%.0f"|format(d.price) }} Tickets:</span>
+                <span class="denom-badge">{{ d.tickets_sold }} sold (${{ "%.2f"|format(d.revenue) }})</span>
+            </div>
+            {% else %}
+            <div style="font-size: 13px; color: #888;">No active sales recorded yet for this shift.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Formatted Itemized Table -->
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th>Slot #</th>
+                    <th>Game #</th>
+                    <th>Game Name</th>
+                    <th class="text-right">Price</th>
+                    <th>Pack ID</th>
+                    <th class="text-center">Current Ticket</th>
+                    <th class="text-right">Tickets Sold</th>
+                    <th class="text-right">Revenue</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td><span class="slot-badge">Slot #{{ item.slot_label or item.slot_number }}</span></td>
+                    <td><strong>#{{ item.game_number }}</strong></td>
+                    <td>{{ item.name }}</td>
+                    <td class="text-right price-tag">${{ "%.2f"|format(item.price) }}</td>
+                    <td><code style="background: #e9ecef; padding: 2px 6px; border-radius: 4px;">{{ item.pack_id }}</code></td>
+                    <td class="text-center">#{{ "%03d"|format(item.current_ticket) }}</td>
+                    <td class="text-right"><strong>{{ item.tickets_sold }}</strong></td>
+                    <td class="text-right" style="color: #2e7d32; font-weight: bold;">${{ "%.2f"|format(item.revenue) }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center" style="padding: 20px; color: #888;">No active dispenser packs found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Cashier Signoff Section -->
+    <div class="sign-block">
+        <div class="sign-line">Cashier Signature ({{ session.get('cashier_name', 'Staff') }})</div>
+        <div class="sign-line">Store Manager Signature</div>
+    </div>
+</body>
+</html>

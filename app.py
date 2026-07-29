@@ -1267,6 +1267,156 @@ def export_change_log_pdf():
                     headers={"Content-disposition": "attachment; filename=Change_Log.pdf"})
 
 
+def pdf_to_bytes(pdf):
+    """Helper to convert FPDF instance to bytes for Response output."""
+    out = pdf.output()
+    if isinstance(out, (bytes, bytearray)):
+        return bytes(out)
+    return str(out).encode('latin1')
+
+
+def get_shift_reconciliation_data(sort_by='slot'):
+    """Fetch active dispenser packs, calculate tickets sold and cash expected,
+    and sort according to cashier/manager preference."""
+    conn = get_db_connection()
+    packs_data = conn.execute('''
+        SELECT p.pack_id, p.game_number, p.status, p.slot_number, p.slot_label, p.current_ticket,
+               COALESCE(g.name, 'Unknown Game') AS name,
+               COALESCE(g.price, 0.0) AS price,
+               COALESCE(g.tickets_per_pack, 0) AS tickets_per_pack
+        FROM packs p
+        LEFT JOIN games g ON p.game_number = g.game_number
+        WHERE p.status IN ('ACTIVE', 'SOLD_OUT')
+    ''').fetchall()
+    conn.close()
+
+    items = []
+    total_tickets_sold = 0
+    total_revenue = 0.0
+
+    for row in packs_data:
+        p = dict(row)
+        curr_t = p['current_ticket'] or 0
+        price = p['price'] or 0.0
+
+        sold = curr_t
+        revenue = sold * price
+
+        p['tickets_sold'] = sold
+        p['revenue'] = revenue
+        items.append(p)
+
+        total_tickets_sold += sold
+        total_revenue += revenue
+
+    # Sorting options
+    if sort_by == 'price':
+        # Sort by Ticket Price descending, then slot number
+        items.sort(key=lambda x: (-x['price'], x['slot_number'] or 0, str(x['slot_label'] or '')))
+    elif sort_by == 'sales_rank':
+        # Sort by Sales/Revenue descending, then tickets sold descending
+        items.sort(key=lambda x: (-x['revenue'], -x['tickets_sold'], x['slot_number'] or 0))
+    else:
+        # Default: Sort by Dispenser Slot Number ascending
+        items.sort(key=lambda x: (x['slot_number'] or 0, str(x['slot_label'] or '')))
+
+    # Denomination Summary grouping
+    denom_summary = {}
+    for item in items:
+        pr = item['price']
+        if pr not in denom_summary:
+            denom_summary[pr] = {'price': pr, 'count': 0, 'tickets_sold': 0, 'revenue': 0.0}
+        denom_summary[pr]['count'] += 1
+        denom_summary[pr]['tickets_sold'] += item['tickets_sold']
+        denom_summary[pr]['revenue'] += item['revenue']
+
+    denom_list = list(denom_summary.values())
+    denom_list.sort(key=lambda x: -x['price'])
+
+    return {
+        'items': items,
+        'denom_summary': denom_list,
+        'total_tickets_sold': total_tickets_sold,
+        'total_revenue': total_revenue,
+        'pack_count': len(items),
+        'sort_by': sort_by,
+        'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+
+
+@app.route('/reconciliation')
+def shift_reconciliation():
+    sort_by = request.args.get('sort_by', 'slot')
+    data = get_shift_reconciliation_data(sort_by)
+    return render_template('reconciliation.html', **data)
+
+
+@app.route('/reconciliation/pdf')
+def shift_reconciliation_pdf():
+    sort_by = request.args.get('sort_by', 'slot')
+    data = get_shift_reconciliation_data(sort_by)
+
+    sort_labels = {
+        'slot': 'Dispenser Slot Number',
+        'price': 'Price per Ticket (High to Low)',
+        'sales_rank': 'Sales Rank per Denomination'
+    }
+    sort_desc = sort_labels.get(sort_by, 'Dispenser Slot Number')
+
+    pdf = FPDF(orientation='L')
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, "Store Lottery Shift Reconciliation Report", ln=True, align='C')
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 6, f"Generated: {data['timestamp']} | Cashier: {session.get('cashier_name', 'Staff')} | Sorted By: {sort_desc}", ln=True, align='C')
+    pdf.ln(4)
+
+    # Summary Cards Box
+    pdf.set_font("Arial", 'B', 10)
+    pdf.set_fill_color(240, 244, 248)
+    pdf.cell(90, 8, f" Total Revenue: ${data['total_revenue']:.2f}", border=1, fill=True)
+    pdf.cell(90, 8, f" Total Tickets Sold: {data['total_tickets_sold']}", border=1, fill=True)
+    pdf.cell(97, 8, f" Active Dispenser Slots: {data['pack_count']}", border=1, fill=True)
+    pdf.ln(12)
+
+    # Table Header
+    pdf.set_font("Arial", 'B', 9)
+    pdf.set_fill_color(220, 220, 220)
+    pdf.cell(20, 8, 'Slot #', border=1, fill=True)
+    pdf.cell(25, 8, 'Game #', border=1, fill=True)
+    pdf.cell(75, 8, 'Game Name', border=1, fill=True)
+    pdf.cell(25, 8, 'Price ($)', border=1, fill=True, align='R')
+    pdf.cell(45, 8, 'Pack ID', border=1, fill=True)
+    pdf.cell(30, 8, 'Curr Ticket', border=1, fill=True, align='C')
+    pdf.cell(27, 8, 'Sold', border=1, fill=True, align='R')
+    pdf.cell(30, 8, 'Revenue ($)', border=1, fill=True, align='R')
+    pdf.ln()
+
+    # Table Rows
+    pdf.set_font("Arial", '', 9)
+    for item in data['items']:
+        slot_str = str(item['slot_label'] or item['slot_number'] or '')
+        pdf.cell(20, 7, slot_str, border=1)
+        pdf.cell(25, 7, str(item['game_number']), border=1)
+        pdf.cell(75, 7, str(item['name'])[:35], border=1)
+        pdf.cell(25, 7, f"${item['price']:.2f}", border=1, align='R')
+        pdf.cell(45, 7, str(item['pack_id']), border=1)
+        pdf.cell(30, 7, f"#{item['current_ticket']:03d}", border=1, align='C')
+        pdf.cell(27, 7, str(item['tickets_sold']), border=1, align='R')
+        pdf.cell(30, 7, f"${item['revenue']:.2f}", border=1, align='R')
+        pdf.ln()
+
+    # Signatures
+    pdf.ln(10)
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(130, 10, f"Cashier Signature ({session.get('cashier_name', 'Staff')}): ___________________________", ln=False)
+    pdf.cell(140, 10, "Manager Signature: ___________________________", ln=True)
+
+    filename = f"Shift_Reconciliation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return Response(pdf_to_bytes(pdf), mimetype="application/pdf",
+                    headers={"Content-disposition": f"attachment; filename={filename}"})
+
+
 @app.route('/backup_database')
 @manager_required
 def backup_database():
