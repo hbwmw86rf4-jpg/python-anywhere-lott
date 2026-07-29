@@ -5,18 +5,19 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="/static/scanner.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
-        .section { background: #f4f4f4; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
-        .slot { border: 1px solid #ccc; padding: 12px; margin-bottom: 10px; background: white; border-radius: 4px; }
-        .alert { padding: 12px; margin-bottom: 15px; border-radius: 4px; font-weight: bold; }
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 950px; margin: auto; background: #f8f9fa; color: #333; }
+        .section { background: white; padding: 18px; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+        .slot { border: 1px solid #e0e0e0; padding: 14px 16px; margin-bottom: 12px; background: white; border-radius: 8px; font-size: 1.05em; }
+        .alert { padding: 12px; margin-bottom: 15px; border-radius: 6px; font-weight: bold; }
         .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .alert-info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
         .alert-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-        table { width: 100%; border-collapse: collapse; background: white; margin-top: 15px; }
-        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-        th { background: #eaeaea; }
-        .cam-btn { margin-top: 10px; padding: 10px 16px; font-size: 15px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-top: 15px; font-size: 15px; border-radius: 6px; overflow: hidden; }
+        th, td { border: 1px solid #e0e0e0; padding: 12px 14px; text-align: left; }
+        th { background: #f1f3f5; font-weight: bold; color: #495057; }
+        tr:nth-child(even) { background: #fafafa; }
+        .cam-btn { margin-top: 10px; padding: 10px 16px; font-size: 15px; background: #0056b3; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .reader { display: none; width: 100%; max-width: 360px; margin-top: 10px; position: relative; }
         /* Scanning frame overlay */
         .scan-frame-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -34,13 +35,13 @@
 
 <!-- Header / Actions -->
 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
-    <h1 style="margin: 0;">Inventory & Games</h1>
+    <h1 style="margin: 0;">Inventory & Games Management</h1>
     <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
-        <a href="/change_log" style="background: #6f42c1; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">📋 Change Log</a>
-        <a href="/backup_database" style="background: #17a2b8; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">💾 Backup</a>
-        <a href="/export_inventory" style="background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">📥 Export</a>
-        <a href="/" style="background: #666; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px;">⬅ Back</a>
-        <a href="/logout" style="background: #dc3545; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px;">Logout</a>
+        <a href="/change_log" style="background: #6f42c1; color: white; padding: 10px 15px; text-decoration: none; border-radius: 6px; font-weight: bold;">📋 Change Log</a>
+        <a href="/backup_database" style="background: #17a2b8; color: white; padding: 10px 15px; text-decoration: none; border-radius: 6px; font-weight: bold;">💾 Backup</a>
+        <a href="/export_inventory" style="background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 6px; font-weight: bold;">📥 Export</a>
+        <a href="/" style="background: #666; color: white; padding: 10px 15px; text-decoration: none; border-radius: 6px;">⬅ Back</a>
+        <a href="/logout" style="background: #dc3545; color: white; padding: 10px 15px; text-decoration: none; border-radius: 6px;">Logout</a>
     </div>
 </div>
 
@@ -65,22 +66,22 @@
         <span>
             <form action="/confirm_return" method="POST" style="display:inline;">
                 <input type="hidden" name="pack_id" value="{{ r.pack_id }}">
-                <button type="submit" style="background:#28a745; color:white; border:none; padding:6px 12px; border-radius:3px; cursor:pointer;">Confirm</button>
+                <button type="submit" style="background:#28a745; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">Confirm</button>
             </form>
             <form action="/cancel_return" method="POST" style="display:inline;" onsubmit="return confirm('Cancel the return for {{ r.pack_id }} and put it back?');">
                 <input type="hidden" name="pack_id" value="{{ r.pack_id }}">
-                <button type="submit" style="background:#6c757d; color:white; border:none; padding:6px 12px; border-radius:3px; cursor:pointer;">Cancel</button>
+                <button type="submit" style="background:#6c757d; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Cancel</button>
             </form>
         </span>
     </div>
     {% else %}
-    <p>No pending returns.</p>
+    <p style="color:#666;">No pending returns.</p>
     {% endfor %}
 </div>
 
 <!-- Backroom Stock (feedback for receiving — kept next to Receive) -->
 <div class="section">
-    <h2>Backroom Stock</h2>
+    <h2>Backroom Stock Inventory</h2>
     {% for p in backroom %}
     {% if p.status == 'DELETED' %}
     <div class="slot" style="background:#fbeaea; opacity:0.75;">
@@ -89,21 +90,26 @@
         <span style="color:#666; font-size:0.85em;"> — re-scan this pack to restore it</span>
     </div>
     {% else %}
-    <div class="slot">
-        <strong>{{ p.name }}</strong> (Pack: <code>{{ p.pack_id }}</code>)
-        <form action="/activate_pack" method="POST" style="display:inline-block; margin-left: 10px;">
-            <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
-            <input type="number" name="slot_number" placeholder="Slot #" required style="width: 60px; padding: 4px;">
-            <button type="submit" style="padding: 4px 8px; background: #0056b3; color: white; border: none; border-radius: 3px; cursor: pointer;">Activate</button>
-        </form>
-        <form action="/delete_pack" method="POST" style="display:inline-block; margin-left: 6px;" onsubmit="return confirm('Delete pack {{ p.pack_id }} from backroom stock? It stays visible struck-through for 6 weeks.');">
-            <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
-            <button type="submit" style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
-        </form>
+    <div class="slot" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div>
+            <strong style="font-size: 1.1em; color: #111;">{{ p.name }}</strong>
+            <span style="margin-left: 8px; font-size: 0.95em;">Pack ID: <code style="background: #f1f3f5; padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #0056b3;">{{ p.pack_id }}</code></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <form action="/activate_pack" method="POST" style="display:flex; align-items:center; gap:6px;">
+                <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
+                <input type="number" name="slot_number" placeholder="Slot #" required style="width: 75px; padding: 6px 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px;">
+                <button type="submit" style="padding: 6px 12px; font-size: 14px; font-weight: bold; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer;">Activate</button>
+            </form>
+            <form action="/delete_pack" method="POST" style="display:inline;" onsubmit="return confirm('Delete pack {{ p.pack_id }} from backroom stock? It stays visible struck-through for 6 weeks.');">
+                <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
+                <button type="submit" style="padding: 6px 12px; font-size: 14px; font-weight: bold; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+            </form>
+        </div>
     </div>
     {% endif %}
     {% else %}
-    <p>No stock currently in backroom.</p>
+    <p style="color:#666;">No stock currently in backroom.</p>
     {% endfor %}
 </div>
 

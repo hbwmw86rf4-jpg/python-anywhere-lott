@@ -140,10 +140,17 @@
         </table>
     </div>
 
-    <!-- Cashier Signoff Section -->
-    <div class="sign-block">
-        <div class="sign-line">Cashier Signature ({{ session.get('cashier_name', 'Staff') }})</div>
-        <div class="sign-line">Store Manager Signature</div>
+    <!-- Digital Verification & Shift Sign-Off -->
+    <div class="sign-block" style="flex-direction: column; align-items: center; text-align: center;">
+        <div style="font-size: 14px; font-weight: bold; color: #2e7d32; display: flex; align-items: center; gap: 8px;">
+            <span>✔ Verified Digital Audit Record</span>
+        </div>
+        <div style="font-size: 13px; color: #666; margin-top: 4px;">
+            Authenticated for <strong>{{ session.get('cashier_name', 'Staff') }}</strong> at {{ timestamp }}
+        </div>
+        <form action="/complete_shift" method="POST" style="margin-top: 12px;">
+            <button type="submit" class="btn" style="background: #28a745; padding: 12px 24px; font-size: 15px;">🔒 Confirm & Sign-Off Shift</button>
+        </form>
     </div>
 </body>
 </html>

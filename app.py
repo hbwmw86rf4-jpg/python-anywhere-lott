@@ -1406,15 +1406,29 @@ def shift_reconciliation_pdf():
         pdf.cell(30, 7, f"${item['revenue']:.2f}", border=1, align='R')
         pdf.ln()
 
-    # Signatures
+    # Digital Verification Badge
     pdf.ln(10)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(130, 10, f"Cashier Signature ({session.get('cashier_name', 'Staff')}): ___________________________", ln=False)
-    pdf.cell(140, 10, "Manager Signature: ___________________________", ln=True)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 8, f"Digital Audit Record - Logged by {session.get('cashier_name', 'Staff')} on {data['timestamp']}", ln=True, align='C')
 
     filename = f"Shift_Reconciliation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     return Response(pdf_to_bytes(pdf), mimetype="application/pdf",
                     headers={"Content-disposition": f"attachment; filename={filename}"})
+
+
+@app.route('/complete_shift', methods=['POST'])
+def complete_shift():
+    conn = get_db_connection()
+    cashier = get_current_actor()
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute('''
+        INSERT INTO change_log (timestamp, actor, category, action, target, details)
+        VALUES (?, ?, 'SHIFT', 'SIGN_OFF', 'Dispenser', ?)
+    ''', (timestamp, cashier, f'Shift audit signed off by {cashier}'))
+    conn.commit()
+    conn.close()
+    flash(f"Shift signed off and logged by {cashier} at {timestamp}.", "success")
+    return redirect(url_for('shift_reconciliation'))
 
 
 @app.route('/backup_database')

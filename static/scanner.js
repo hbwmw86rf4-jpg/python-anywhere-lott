@@ -209,7 +209,7 @@
                         <div style="font-weight:bold; margin-bottom:4px;">💡 Where to find numbers on ticket back:</div>
                         <div class="lott-ticket-diagram">
                             <div>
-                                <span class="lott-badge lott-badge-game">GAME (3-4 digits)</span>
+                                <span class="lott-badge lott-badge-game">GAME (3 or 4 digits)</span>
                                 <span class="lott-badge lott-badge-pack">PACK (5-6 digits)</span>
                                 <span class="lott-badge lott-badge-ticket">TICKET (3 digits)</span>
                             </div>
@@ -229,7 +229,7 @@
                     <div id="lottGuidedGroup" class="lott-field-group">
                         <div class="lott-field-box">
                             <label style="color:#0056b3;">1. Game #</label>
-                            <input type="text" id="npGame" class="lott-field-input active" placeholder="754" readonly>
+                            <input type="text" id="npGame" class="lott-field-input active" placeholder="754 / 1234" readonly>
                         </div>
                         <div class="lott-field-box">
                             <label style="color:#28a745;">2. Pack #</label>
@@ -441,7 +441,7 @@
 
         injectStyles();
 
-        // Auto-attach a Touch Numpad button right beside camera scan button
+        // Auto-attach a Manual Entry button right beside camera scan button
         var npBtnId = btnId + '_numpad';
         if (!document.getElementById(npBtnId) && btn && btn.parentNode) {
             var npBtn = document.createElement('button');
@@ -450,7 +450,7 @@
             npBtn.className = btn.className || 'cam-btn';
             npBtn.style.background = '#28a745';
             npBtn.style.marginLeft = '8px';
-            npBtn.innerHTML = '⌨ Touch Numpad';
+            npBtn.innerHTML = '⌨ Manual Entry';
             npBtn.addEventListener('click', function () {
                 window.openTouchNumpad(inputId, formId);
             });
