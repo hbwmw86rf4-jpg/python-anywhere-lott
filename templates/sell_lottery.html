@@ -91,6 +91,10 @@
 
     <!-- Scan input -->
     <div style="background: white; padding: 20px; text-align: center; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+        <form id="undoForm" method="POST" style="display:none;">
+            <input type="hidden" name="undo_last" value="1">
+        </form>
+
         <form id="scanForm" method="POST">
             <label style="font-size: 1.2em; font-weight: bold;">Scan Ticket Barcode:</label><br>
             <input type="text" name="barcode" id="scanBarcode" required autofocus placeholder="Scan Barcode Here…" style="font-size: 1.3em; padding: 12px; width: 85%; max-width: 380px; margin: 12px 0; border: 2px solid #007bff; border-radius: 6px; text-align: center;">
@@ -98,9 +102,8 @@
             <div class="scan-action-grid">
                 <button type="submit" class="scan-action-btn" style="background-color: #007bff; color: white;">➕ Add to Cart</button>
                 <button type="button" id="sellCamBtn" class="scan-action-btn" style="background-color: #0056b3; color: white;">📷 Scan Camera</button>
-                <form method="POST" style="margin: 0; display: contents;">
-                    <button type="submit" name="undo_last" value="1" class="scan-action-btn" style="background-color: #ffc107; color: #333;">↩ Undo Scan</button>
-                </form>
+                <button type="button" id="sellManualBtn" class="scan-action-btn" style="background-color: #28a745; color: white;">⌨ Manual Entry</button>
+                <button type="submit" form="undoForm" class="scan-action-btn" style="background-color: #ffc107; color: #333;">↩ Undo Scan</button>
             </div>
         </form>
         <div id="sellReader" style="display:none; width:100%; max-width:360px; margin:12px auto 0; position: relative;"></div>
@@ -119,43 +122,47 @@
         </tr>
         {% for item in cart_display %}
         <tr>
-            <td style="text-align:left;">
-                {{ item.game_name }} <span style="color:#666;">#{{ item.game_number }}</span>
-                {% if item.mode == 'bulk' %}<span style="font-size:0.8em; color:#007bff;">(bulk)</span>{% endif %}
+            <td>
+                <strong>{{ item.game_name }}</strong><br>
+                <span style="font-size:0.85em; color:#666;">Game #{{ item.game_number }} · Pack {{ item.pack_id }}</span>
             </td>
-            <td style="text-align:left;">
+            <td>
+                <span style="font-family: monospace; font-size: 1.1em; color: #0056b3; font-weight: bold;">
+                    {{ item.scans_str }}
+                </span>
                 {% if item.mode == 'bulk' %}
-                    #{{ "%03d"|format(item.scans[0]) }} → #{{ "%03d"|format(item.scans[-1]) }}
-                    <span style="color:#666; font-size:0.85em;">(range #{{ "%03d"|format(item.min_t) }}–#{{ "%03d"|format(item.max_t) }})</span>
-                {% else %}
-                    {% for t in item.scans %}<span{% if loop.last %} style="font-weight:bold; color:#0056b3;"{% endif %}>#{{ "%03d"|format(t) }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+                    <br><span style="font-size:0.8em; color:#28a745; font-weight:bold;">BULK RANGE</span>
                 {% endif %}
             </td>
-            <td>{{ item.qty }}</td>
-            <td>${{ "%.2f"|format(item.line_total) }}</td>
+            <td><strong>{{ item.qty }}</strong></td>
+            <td><strong style="color: #2e7d32;">${{ "%.2f"|format(item.line_total) }}</strong></td>
             <td>
                 <form method="POST" style="display:inline;">
-                    <button type="submit" name="remove_pack" value="{{ item.pack_id }}" style="color: red; cursor: pointer;">✕</button>
+                    <button type="submit" name="remove_pack" value="{{ item.pack_id }}" style="color: red; cursor: pointer; background: none; border: none; font-size: 1.2em;">❌</button>
                 </form>
             </td>
         </tr>
         {% endfor %}
+        <tr style="background: #e9ecef; font-size: 1.2em; font-weight: bold;">
+            <td colspan="3" style="text-align: right;">TOTAL:</td>
+            <td style="color: #2e7d32;">${{ "%.2f"|format(grand_total) }}</td>
+            <td></td>
+        </tr>
     </table>
 
-    <h3 style="text-align: right;">Total: ${{ "%.2f"|format(grand_total) }}</h3>
-
-    <div style="text-align: right; margin-top: 20px;">
-        <form method="POST" style="display: inline;">
-            <button type="submit" name="clear_cart" value="true" class="btn" style="background-color: #dc3545; color: white;">Clear Cart</button>
+    <div style="margin-top: 20px; display: flex; gap: 15px; justify-content: flex-end;">
+        <form method="POST">
+            <button type="submit" name="clear_cart" value="1" class="btn" style="background-color: #dc3545; color: white; padding: 10px 20px; font-size: 1em;" onsubmit="return confirm('Clear entire cart?');">Clear Cart</button>
         </form>
-        <form action="/process_cart" method="POST" style="display: inline;">
-            <button type="submit" class="btn" style="background-color: #28a745; color: white;">TOTAL OUT</button>
-        </form>
+        <a href="/checkout" class="btn" style="background-color: #28a745; color: white; text-align: center;">Finish & Complete Sale (${{ "%.2f"|format(grand_total) }}) →</a>
     </div>
     {% endif %}
 
     <script>
         wireCamera('sellCamBtn', 'sellReader', 'scanBarcode', 'scanForm');
+        document.getElementById('sellManualBtn').onclick = function() {
+            window.openTouchNumpad('scanBarcode', 'scanForm');
+        };
     </script>
 </body>
 </html>

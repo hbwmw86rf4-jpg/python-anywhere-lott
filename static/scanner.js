@@ -482,11 +482,17 @@
 
         btn.dataset.originalText = btn.dataset.originalText || btn.textContent;
 
+        var hasScannedCount = 0;
+
         function cleanupUI() {
             reader.innerHTML = '';
             reader.style.display = 'none';
             btn.textContent = btn.dataset.originalText || '📷 Scan with Camera';
             running = false;
+            if (hasScannedCount > 0) {
+                hasScannedCount = 0;
+                window.location.reload();
+            }
         }
 
         function stopCamera() {
@@ -517,11 +523,12 @@
 
         function handleSuccessfulScan(decodedText) {
             var now = Date.now();
-            if (lastScan.code === decodedText && (now - lastScan.ts) < 1500) {
+            if (lastScan.code === decodedText && (now - lastScan.ts) < 1800) {
                 return; // Suppress rapid duplicate scans
             }
             lastScan.code = decodedText;
             lastScan.ts = now;
+            hasScannedCount++;
 
             // Audio + Visual + Haptic feedback
             playScanBeep();
@@ -530,19 +537,44 @@
             var frame = reader.querySelector('.lott-scan-frame');
             if (frame) frame.classList.add('success');
 
+            var statusEl = reader.querySelector('.lott-scan-status');
+            if (statusEl) {
+                statusEl.textContent = '✓ Scanned: ' + decodedText;
+                statusEl.style.color = '#39ff14';
+            }
+
             var inputEl = document.getElementById(inputId);
             if (inputEl) {
                 inputEl.value = decodedText;
             }
 
-            // Stop camera fully before submitting form to avoid camera lock / race conditions
+            // Perform continuous background scan via AJAX (keeps camera ON, 0 permission prompts)
+            var form = document.getElementById(formId);
+            if (form) {
+                var formData = new FormData(form);
+                formData.set('barcode', decodedText);
+                fetch(form.action || window.location.href, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function (res) {
+                    return res.json().catch(function () { return { success: true, message: 'Scanned ' + decodedText }; });
+                }).then(function (data) {
+                    if (statusEl && data && data.message) {
+                        statusEl.textContent = (data.success ? '✓ ' : '⚠️ ') + data.message;
+                        statusEl.style.color = data.success ? '#39ff14' : '#ff4d4d';
+                    }
+                }).catch(function () {});
+            }
+
+            // Keep camera running continuously! Reset overlay status after 1.5s
             setTimeout(function () {
-                stopCamera();
-                setTimeout(function () {
-                    var form = document.getElementById(formId);
-                    if (form) form.submit();
-                }, 120);
-            }, 250);
+                if (frame) frame.classList.remove('success');
+                if (statusEl) {
+                    statusEl.textContent = 'Ready for next ticket scan...';
+                    statusEl.style.color = '#ffffff';
+                }
+            }, 1500);
         }
 
         // Add visual overlay to container

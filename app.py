@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, session, send_file, jsonify
 import sqlite3
 import datetime
 import csv
@@ -280,10 +280,14 @@ def shift_scan():
     """Log a shift reading: staff scan the ticket now showing at the front of a
     dispenser slot. The gap between the pack's last known ticket and the scanned
     one is the number sold since the last reading."""
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('json') == '1'
     cashier = current_actor()
     parsed = parse_ticket_barcode(request.form.get('barcode', ''))
     if not parsed:
-        flash("Invalid barcode length.", "danger")
+        msg = "Invalid barcode length."
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg})
+        flash(msg, "danger")
         return redirect(url_for('index'))
 
     game_num, pack_id, ticket_num = parsed
@@ -294,13 +298,19 @@ def shift_scan():
 
     if not game or not pack:
         conn.close()
-        flash(f"Pack {pack_id} is not active in a dispenser slot.", "danger")
+        msg = f"Pack {pack_id} is not active in a dispenser slot."
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg})
+        flash(msg, "danger")
         return redirect(url_for('index'))
 
     error = validate_reading(ticket_num, pack['current_ticket'])
     if error:
         conn.close()
-        flash(f"{error} Nothing logged.", "danger")
+        msg = f"{error} Nothing logged."
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg})
+        flash(msg, "danger")
         return redirect(url_for('index'))
 
     tickets_sold = pack['current_ticket'] - ticket_num
@@ -313,6 +323,10 @@ def shift_scan():
     conn.execute('UPDATE packs SET current_ticket = ? WHERE pack_id = ?', (ticket_num, pack_id))
     conn.commit()
     conn.close()
+
+    msg = f"Logged {pack_id}: {tickets_sold} sold (${cash_expected:.2f})"
+    if is_ajax:
+        return jsonify({'success': True, 'message': msg, 'pack_id': pack_id, 'tickets_sold': tickets_sold, 'cash_expected': cash_expected})
 
     flash(f"Shift reading logged for {pack_id}: {tickets_sold} sold (${cash_expected:.2f}).", "success")
     return redirect(url_for('index'))
@@ -495,18 +509,24 @@ def sell_lottery():
             return redirect(url_for('sell_lottery'))
 
         # Otherwise this is a barcode scan.
-        # Duplicate-scan guard: ignore the same barcode fired twice within 2 seconds.
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.args.get('json') == '1'
         raw_scan = request.form.get('barcode', '').strip()
         now_ts = datetime.datetime.now().timestamp()
         last_sell = session.get('last_sell')
         if last_sell and last_sell.get('code') == raw_scan and (now_ts - last_sell.get('ts', 0)) < 2:
-            flash("Ignored a duplicate scan.", "info")
+            msg = "Ignored duplicate scan."
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg})
+            flash(msg, "info")
             return redirect(url_for('sell_lottery'))
         session['last_sell'] = {'code': raw_scan, 'ts': now_ts}
 
         parsed = parse_ticket_barcode(raw_scan)
         if not parsed:
-            flash("Invalid barcode length.", "danger")
+            msg = "Invalid barcode length."
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg})
+            flash(msg, "danger")
             return redirect(url_for('sell_lottery'))
 
         game_num, pack_id, ticket_num = parsed
@@ -517,11 +537,17 @@ def sell_lottery():
         conn.close()
 
         if not game or not pack or pack['status'] != 'DISPENSER':
-            flash(f"Pack {pack_id} is not active or game not found.", "danger")
+            msg = f"Pack {pack_id} is not active in dispenser."
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg})
+            flash(msg, "danger")
             return redirect(url_for('sell_lottery'))
 
         if ticket_num > pack['current_ticket']:
-            flash(f"Ticket #{ticket_num:03d} has already been sold!", "danger")
+            msg = f"Ticket #{ticket_num:03d} has already been sold!"
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg})
+            flash(msg, "danger")
             return redirect(url_for('sell_lottery'))
 
         mode = session.get('scan_mode', 'single')
@@ -540,28 +566,32 @@ def sell_lottery():
             }
             cart[pack_id] = entry
 
-        # A run starting at the highest scanned ticket can only reach down to
-        # #000, so at most (top + 1) tickets are available. Reject a scan that
-        # would sell past the bottom of the pack (e.g. scanning #000 twice).
         top_t = max(entry['scans'])
         if line_qty(entry) > top_t + 1:
             entry['scans'].pop()
             if not entry['scans']:
                 del cart[pack_id]
             session.modified = True
-            flash(f"Only {top_t + 1} ticket(s) remain at or below #{top_t:03d} in {pack_id}.", "danger")
+            msg = f"Only {top_t + 1} ticket(s) remain at or below #{top_t:03d}."
+            if is_ajax:
+                return jsonify({'success': False, 'message': msg})
+            flash(msg, "danger")
             return redirect(url_for('sell_lottery'))
-
-        # Bulk mode needs feedback on each of its two scans (single mode shows
-        # the cart line updating and would just be noise).
-        if mode == 'bulk':
-            if len(entry['scans']) == 1:
-                flash(f"First ticket #{ticket_num:03d} captured — now scan the LAST ticket of the run.", "info")
-            else:
-                flash(f"Bulk range #{min(entry['scans']):03d}–#{max(entry['scans']):03d} = {line_qty(entry)} ticket(s).", "success")
 
         session['last_pack'] = pack_id
         session.modified = True
+
+        msg = f"Added {pack_id} #{ticket_num:03d} to cart"
+        if mode == 'bulk':
+            if len(entry['scans']) == 1:
+                msg = f"First ticket #{ticket_num:03d} captured — now scan LAST ticket."
+            else:
+                msg = f"Bulk range #{min(entry['scans']):03d}–#{max(entry['scans']):03d} captured."
+
+        if is_ajax:
+            return jsonify({'success': True, 'message': msg, 'pack_id': pack_id, 'ticket_num': ticket_num})
+
+        flash(msg, "success" if mode != 'bulk' or len(entry['scans']) > 1 else "info")
         return redirect(url_for('sell_lottery'))
 
     # Calculate live totals for the page.
