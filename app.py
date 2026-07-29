@@ -1287,18 +1287,26 @@ def github_webhook():
     import subprocess
     import glob
     try:
-        # Pull latest commits from GitHub
-        pull_output = subprocess.check_output(['git', 'pull'], cwd=BASE_DIR, stderr=subprocess.STDOUT, text=True)
+        # Automatically stash any local database/runtime changes so git pull never conflicts
+        subprocess.run(['git', 'stash'], cwd=BASE_DIR, check=False)
+
+        # Pull latest commits from main branch
+        pull_output = subprocess.check_output(['git', 'pull', 'origin', 'main'], cwd=BASE_DIR, stderr=subprocess.STDOUT, text=True)
 
         # Touch PythonAnywhere WSGI configuration files to trigger web app auto-reload
         reloaded = []
-        wsgi_files = glob.glob('/var/www/*_wsgi.py') + [os.path.expanduser('~/.pythonanywhere_wsgi.py')]
-        for wf in wsgi_files:
-            try:
-                subprocess.run(['touch', wf], check=False)
-                reloaded.append(wf)
-            except Exception:
-                pass
+        possible_wsgi = (
+            glob.glob('/var/www/*_wsgi.py') +
+            glob.glob('/var/www/*_pythonanywhere_com_wsgi.py') +
+            [os.path.expanduser('~/.pythonanywhere_wsgi.py')]
+        )
+        for wf in possible_wsgi:
+            if os.path.exists(wf):
+                try:
+                    subprocess.run(['touch', wf], check=False)
+                    reloaded.append(wf)
+                except Exception:
+                    pass
 
         return f"Auto-deployment successful!\n\nPull Output:\n{pull_output}\nReloaded WSGI targets: {reloaded}", 200
     except Exception as e:
