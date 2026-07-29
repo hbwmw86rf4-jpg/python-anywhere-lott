@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inventory & Games Management</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="/static/scanner.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+        .section { background: #f4f4f4; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        .slot { border: 1px solid #ccc; padding: 12px; margin-bottom: 10px; background: white; border-radius: 4px; }
+        .alert { padding: 12px; margin-bottom: 15px; border-radius: 4px; font-weight: bold; }
+        .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .alert-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-top: 15px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+        th { background: #eaeaea; }
+        .cam-btn { margin-top: 10px; padding: 10px 16px; font-size: 15px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .reader { display: none; width: 100%; max-width: 360px; margin-top: 10px; position: relative; }
+        /* Scanning frame overlay */
+        .scan-frame-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 140px; border: 2px solid #00ff00; border-radius: 6px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
+        .scan-corner { position: absolute; width: 16px; height: 16px; border: 2px solid #00ff00; }
+        .scan-corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+        .scan-corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
+        .scan-corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
+        .scan-corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+        .scan-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #00ff00; animation: scan-anim 2s infinite; }
+        @keyframes scan-anim { 0% { transform: translateY(0); opacity: 0.5; } 50% { opacity: 1; } 100% { transform: translateY(140px); opacity: 0.5; } }
+    </style>
+</head>
+<body>
+
+<!-- Header / Actions -->
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+    <h1 style="margin: 0;">Inventory & Games</h1>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
+        <a href="/change_log" style="background: #6f42c1; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">📋 Change Log</a>
+        <a href="/backup_database" style="background: #17a2b8; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">💾 Backup</a>
+        <a href="/export_inventory" style="background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">📥 Export</a>
+        <a href="/" style="background: #666; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px;">⬅ Back</a>
+        <a href="/logout" style="background: #dc3545; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px;">Logout</a>
+    </div>
+</div>
+
+<!-- Flash Messages (rendered once, here) -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- Pending Rep Returns -->
+<div class="section" style="border-left: 5px solid #e8590c;">
+    <h2>↩ Pending Rep Returns</h2>
+    {% for r in pending_returns %}
+    <div class="slot" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <span>
+            <strong>{{ r.name }}</strong> (Pack: <code>{{ r.pack_id }}</code>){% if r.slot_label or r.slot_number %} · was Slot {{ r.slot_label or r.slot_number }}{% endif %}<br>
+            <span style="color:#666; font-size:0.85em;">recorded by {{ r.returned_by }} at {{ r.returned_at }}</span>
+        </span>
+        <span>
+            <form action="/confirm_return" method="POST" style="display:inline;">
+                <input type="hidden" name="pack_id" value="{{ r.pack_id }}">
+                <button type="submit" style="background:#28a745; color:white; border:none; padding:6px 12px; border-radius:3px; cursor:pointer;">Confirm</button>
+            </form>
+            <form action="/cancel_return" method="POST" style="display:inline;" onsubmit="return confirm('Cancel the return for {{ r.pack_id }} and put it back?');">
+                <input type="hidden" name="pack_id" value="{{ r.pack_id }}">
+                <button type="submit" style="background:#6c757d; color:white; border:none; padding:6px 12px; border-radius:3px; cursor:pointer;">Cancel</button>
+            </form>
+        </span>
+    </div>
+    {% else %}
+    <p>No pending returns.</p>
+    {% endfor %}
+</div>
+
+<!-- Backroom Stock (feedback for receiving — kept next to Receive) -->
+<div class="section">
+    <h2>Backroom Stock</h2>
+    {% for p in backroom %}
+    {% if p.status == 'DELETED' %}
+    <div class="slot" style="background:#fbeaea; opacity:0.75;">
+        <span style="text-decoration: line-through;"><strong>{{ p.name }}</strong> (Pack: <code>{{ p.pack_id }}</code>)</span>
+        <span style="color:#dc3545; font-weight:bold; margin-left:10px;">🗑 DELETED {{ p.deleted_at }}</span>
+        <span style="color:#666; font-size:0.85em;"> — re-scan this pack to restore it</span>
+    </div>
+    {% else %}
+    <div class="slot">
+        <strong>{{ p.name }}</strong> (Pack: <code>{{ p.pack_id }}</code>)
+        <form action="/activate_pack" method="POST" style="display:inline-block; margin-left: 10px;">
+            <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
+            <input type="number" name="slot_number" placeholder="Slot #" required style="width: 60px; padding: 4px;">
+            <button type="submit" style="padding: 4px 8px; background: #0056b3; color: white; border: none; border-radius: 3px; cursor: pointer;">Activate</button>
+        </form>
+        <form action="/delete_pack" method="POST" style="display:inline-block; margin-left: 6px;" onsubmit="return confirm('Delete pack {{ p.pack_id }} from backroom stock? It stays visible struck-through for 6 weeks.');">
+            <input type="hidden" name="pack_id" value="{{ p.pack_id }}">
+            <button type="submit" style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
+        </form>
+    </div>
+    {% endif %}
+    {% else %}
+    <p>No stock currently in backroom.</p>
+    {% endfor %}
+</div>
+
+<!-- Receive New Stock -->
+<div class="section" style="border-left: 5px solid #28a745;">
+    <h2>Receive New Stock</h2>
+    <form id="receiveForm" method="POST" action="/receive_scan">
+        <p style="color: #555; font-size: 0.9em; margin-top: 0;">Scan incoming packs to add them directly to Backroom Stock.</p>
+        <input type="text" name="barcode" id="receive_barcode" placeholder="Scan new pack here..." autocomplete="off" autofocus
+               style="width: 100%; max-width: 300px; padding: 10px; font-size: 16px; border: 2px solid #28a745; border-radius: 4px;">
+        <button type="submit" style="display: none;">Submit</button>
+    </form>
+    <button type="button" id="receiveCamBtn" class="cam-btn" style="background:#28a745;">📷 Scan with Camera</button>
+    <div id="receiveReader" class="reader"></div>
+</div>
+
+<!-- Active Games Database -->
+<div class="section">
+<h2>List of games in circulation</h2>
+
+    <table>
+        <tr>
+            <th>Game #</th>
+            <th>Name</th>
+            <th>Price</th>
+            <th>Tkts/Pack</th>
+            <th>Action</th>
+        </tr>
+        {% for game in games %}
+        <tr>
+            <td>{{ game.game_number }}</td>
+            <td>{{ game.name }}</td>
+            <td>${{ "%.2f"|format(game.price) }}</td>
+            <td>{{ game.tickets_per_pack }}</td>
+            <td>
+                <form action="/delete_game" method="POST" style="display:inline;" onsubmit="return confirm('Delete game #{{ game.game_number }} ({{ game.name }})? This only works if no packs reference it.');">
+                    <input type="hidden" name="game_number" value="{{ game.game_number }}">
+                    <button type="submit" style="color: red; cursor: pointer;">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="5" style="text-align: center; color: #666;">No games in database.</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h3 style="margin-top: 20px;">Add a New Game Manually</h3>
+    <form action="/add_game" method="POST" style="background: {% if prefill_game %}#fff3cd{% else %}#e9ecef{% endif %}; padding: 15px; border-radius: 5px;">
+        {% if prefill_game %}<p style="margin-top:0; color:#856404; font-weight:bold;">New game #{{ prefill_game }} scanned — fill in its name and price, then re-scan the pack.</p>{% endif %}
+        <input type="text" name="game_number" placeholder="Game # (e.g. 854)" required value="{{ prefill_game }}" style="width: 120px; padding: 5px;">
+        <input type="text" name="name" id="new_game_name" placeholder="Game Name" required style="width: 200px; padding: 5px;">
+        <input type="number" step="0.01" name="price" placeholder="Price ($)" required style="width: 80px; padding: 5px;">
+        <input type="number" name="tickets_per_pack" placeholder="Tickets/Pack" required style="width: 100px; padding: 5px;">
+        <button type="submit" style="background-color: #007bff; color: white; border: none; padding: 7px 15px; border-radius: 3px; cursor: pointer;">Add Game</button>
+    </form>
+</div>
+
+<!-- Manage Cashiers (kept just above the Danger Zone) -->
+<div class="section">
+    <h2>Manage Cashiers</h2>
+
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Action</th>
+        </tr>
+        {% for emp in employees %}
+        <tr>
+            <td>{{ emp.id }}</td>
+            <td>{{ emp.name }}</td>
+            <td>
+                {% if emp.name != 'Manager' %}
+                <form action="/delete_employee" method="POST">
+                    <input type="hidden" name="emp_id" value="{{ emp.id }}">
+                    <button type="submit" style="color: red;">Delete</button>
+                </form>
+                {% else %}
+                Cannot Delete Default
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h3>Add New Cashier</h3>
+    <form action="/add_employee" method="POST">
+        <div>
+            <label for="name">Employee Name:</label>
+            <input type="text" id="name" name="name" required placeholder="e.g. Sarah">
+        </div>
+
+        <button type="submit" style="margin-top: 15px;">Add Cashier</button>
+    </form>
+</div>
+
+<!-- DANGER ZONE -->
+<div class="section" style="border-left: 5px solid #dc3545; margin-top: 40px; background-color: #fff3f3;">
+    <h2 style="color: #dc3545;">⚠️ Danger Zone: Wipe Inventory Data</h2>
+    <p style="color: #555;">This will permanently delete all active dispenser packs, backroom stock, and audit histories. <strong>Your games catalog and cashiers will NOT be deleted.</strong></p>
+
+    <form action="/wipe_test_data" method="POST" onsubmit="return confirm('WARNING: Are you absolutely sure you want to wipe all inventory data? This cannot be undone!');">
+        <input type="password" name="master_password" placeholder="Enter Master Password" required style="width: 200px; padding: 8px; border: 1px solid #dc3545; border-radius: 4px;">
+        <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 9px 15px; border-radius: 4px; font-weight: bold; cursor: pointer;">WIPE DATA</button>
+    </form>
+</div>
+
+<!-- Mass Upload CSV (at the very bottom so it doesn't distract while scanning) -->
+<div class="section" style="border-left: 5px solid #17a2b8;">
+    <h2>Mass Upload Games (CSV)</h2>
+    <form action="/upload_games_csv" method="POST" enctype="multipart/form-data">
+        <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 5px;">Upload CSV File</label>
+        <input type="file" name="file" accept=".csv" required style="font-size: 12px; width: 180px;">
+        <button type="submit" style="background-color: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">Upload</button>
+    </form>
+</div>
+
+<script>
+    wireCamera('receiveCamBtn', 'receiveReader', 'receive_barcode', 'receiveForm');
+
+    // Keep the caret ready for rapid scanning.
+    window.addEventListener('load', function () {
+        {% if prefill_game %}
+        var el = document.getElementById('new_game_name');
+        {% else %}
+        var el = document.getElementById('receive_barcode');
+        {% endif %}
+        if (el) { el.focus(); }
+    });
+</script>
+</body>
+</html>

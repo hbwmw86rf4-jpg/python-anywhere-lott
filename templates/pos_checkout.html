@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Checkout</title>
+    <!-- Use a bright, distinct background so cashiers know exactly what screen they are on -->
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4fcf8; text-align: center; padding-top: 50px; }
+        .barcode-container { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: inline-block; }
+        .total-price { font-size: 3em; color: #2e7d32; margin-bottom: 20px; font-weight: bold; }
+        .barcode-img { max-width: 100%; height: auto; image-rendering: pixelated; }
+        .btn-return { display: block; width: 250px; margin: 40px auto; padding: 20px; font-size: 1.5em; background-color: #007bff; color: white; text-decoration: none; border-radius: 8px; }
+    </style>
+</head>
+<body>
+<!-- Inside your body tag, add the receipt display -->
+<div class="barcode-container">
+    <div class="total-price">Total: ${{ total }}</div>
+
+    <img src="{{ url_for('static', filename='checkout_barcode.png') }}" class="barcode-img" alt="Scan at Register">
+
+    <!-- NEW: Receipt Tally -->
+    <div style="margin-top: 30px; text-align: left; background: #f1f1f1; padding: 15px; border-radius: 8px;">
+        <h4>Transaction Summary:</h4>
+        <ul style="list-style: none; padding: 0;">
+        {% for item in receipt %}
+            <li>{{ item.qty }}x {{ item.name }} = ${{ "%.2f"|format(item.total) }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- Updated routing: Go back to sales floor, not shift tracker! -->
+<a href="/sell_lottery" class="btn-return">Complete & Next Customer</a>
+    <div class="barcode-container">
+        <div class="total-price">Total: ${{ total }}</div>
+
+        <!-- Display the generated barcode image -->
+        <img src="{{ url_for('static', filename='checkout_barcode.png') }}" class="barcode-img" alt="Scan at Register">
+
+        <p style="color: #666; font-size: 1.2em; margin-top: 20px;">Scan this code with the main register scanner.</p>
+    </div>
+
+    <a href="/" class="btn-return">Complete & Return</a>
+
+</body>
+</html>

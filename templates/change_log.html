@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Change Log</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1100px; margin: auto; }
+        .bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        .btn { padding: 10px 15px; text-decoration: none; border-radius: 4px; font-weight: bold; color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+        th { background: #eaeaea; position: sticky; top: 0; }
+        tr:nth-child(even) { background: #fafafa; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; color: white; }
+        .INVENTORY { background: #0056b3; }
+        .GAME { background: #28a745; }
+        .CASHIER { background: #6f42c1; }
+        .SYSTEM { background: #dc3545; }
+        .CORRECTION { background: #e8590c; }
+        .RETURN { background: #b34700; }
+        /* Corrections (edits/deletes) get a highlighted row so they jump out. */
+        tr:has(.CORRECTION) { background: #fff4e6 !important; }
+        .filters a { margin-right: 8px; text-decoration: none; color: #0056b3; }
+        .filters a.active { font-weight: bold; text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="bar">
+        <h1 style="margin:0;">📋 Change Log</h1>
+        <div>
+            <a href="/export_change_log_csv" class="btn" style="background:#28a745;">📥 CSV</a>
+            <a href="/export_change_log_pdf" class="btn" style="background:#17a2b8;">📄 PDF</a>
+            <a href="/games" class="btn" style="background:#666;">⬅ Back</a>
+        </div>
+    </div>
+
+    <div class="filters">
+        Filter:
+        <a href="/change_log" class="{{ 'active' if not selected else '' }}">All</a>
+        {% for c in categories %}
+            <a href="/change_log?category={{ c.category }}" class="{{ 'active' if selected == c.category else '' }}">{{ c.category }}</a>
+        {% endfor %}
+    </div>
+
+    <table>
+        <tr>
+            <th>When</th>
+            <th>Staff</th>
+            <th>Category</th>
+            <th>Action</th>
+            <th>Target</th>
+            <th>Old</th>
+            <th>New</th>
+            <th>Details</th>
+        </tr>
+        {% for r in rows %}
+        <tr>
+            <td>{{ r.timestamp }}</td>
+            <td>{{ r.actor }}</td>
+            <td><span class="tag {{ r.category }}">{{ r.category }}</span></td>
+            <td>{{ r.action }}</td>
+            <td>{{ r.target }}</td>
+            <td>{{ r.old_value }}</td>
+            <td>{{ r.new_value }}</td>
+            <td>{{ r.details }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center; color:#666;">No changes recorded yet.</td></tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

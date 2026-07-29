@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Cashier Login</title>
+    <style>body { font-family: Arial; text-align: center; padding-top: 100px; }</style>
+</head>
+<body>
+    <h2>Cashier Login</h2>
+    
+    <!-- Flash Messages (Displays "Invalid PIN" if they mess up) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div style="color: {% if category == 'danger' %}red{% else %}green{% endif %}; font-weight: bold; margin-bottom: 15px;">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <input type="password" name="pin" pattern="\d{4}" title="4 Digits" required autofocus placeholder="Enter 4-Digit PIN" style="font-size: 2em; text-align: center; width: 300px; padding: 10px;">
+        <br><br>
+        <button type="submit" style="padding: 15px 40px; font-size: 1.2em;">Log In</button>
+    </form>
+</body>
+</html>

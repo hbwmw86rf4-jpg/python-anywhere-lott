@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sell Lottery</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="/static/scanner.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
+        .btn { padding: 15px 30px; font-size: 1.2em; cursor: pointer; text-decoration: none; display: inline-block; border: none; border-radius: 6px; }
+        .mode-toggle { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
+        .mode-toggle button { padding: 10px 18px; font-size: 1em; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .mode-toggle button.active { background: #007bff; color: white; }
+        .hint { color: #555; font-size: 0.9em; }
+        /* Scanning frame overlay */
+        .scan-frame-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 140px; border: 2px solid #00ff00; border-radius: 6px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); }
+        .scan-corner { position: absolute; width: 16px; height: 16px; border: 2px solid #00ff00; }
+        .scan-corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+        .scan-corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
+        .scan-corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
+        .scan-corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+        .scan-line { position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #00ff00; animation: scan-anim 2s infinite; }
+        @keyframes scan-anim { 0% { transform: translateY(0); opacity: 0.5; } 50% { opacity: 1; } 100% { transform: translateY(140px); opacity: 0.5; } }
+    </style>
+</head>
+<body>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <a href="/" class="btn" style="background-color: #6c757d; color: white;">← Back to Shift Tracker</a>
+        <div>
+            <span style="font-weight: bold; color: #555; margin-right: 12px;">👤 {{ session.get('cashier_name') }}</span>
+            <a href="/logout" style="background-color: #dc3545; color: white; padding: 8px 15px; text-decoration: none; border-radius: 4px; font-weight: bold;">Log Out</a>
+        </div>
+    </div>
+
+    {% set msgs = get_flashed_messages(with_categories=true) %}
+    {% set ns = namespace(error=false) %}
+    {% if msgs %}
+      <div style="max-width: 600px; margin: 10px auto;">
+      {% for category, message in msgs %}
+        {% if category == 'danger' %}{% set ns.error = true %}{% endif %}
+        <div style="padding: 15px; margin-bottom: 10px; border-radius: 5px; text-align: center; font-weight: bold; font-size: 1.1em;
+                    {% if category == 'danger' %}background-color: #f8d7da; color: #721c24; border: 2px solid #dc3545;
+                    {% elif category == 'info' %}background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb;
+                    {% else %}background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+      </div>
+    {% endif %}
+    {% if ns.error %}
+    <script>
+        // Audible cue so a rejected scan isn't missed during fast scanning.
+        (function () {
+            try {
+                var ctx = new (window.AudioContext || window.webkitAudioContext)();
+                var o = ctx.createOscillator(), g = ctx.createGain();
+                o.connect(g); g.connect(ctx.destination);
+                o.type = 'square'; o.frequency.value = 220; g.gain.value = 0.2;
+                o.start(); setTimeout(function () { o.stop(); ctx.close(); }, 250);
+            } catch (e) { /* audio may be blocked; the red banner still shows */ }
+        })();
+    </script>
+    {% endif %}
+
+    <h2 style="text-align: center;">Sell Lottery</h2>
+
+    <!-- Scan mode toggle -->
+    <div class="mode-toggle">
+        <form method="POST" style="display:inline;">
+            <button type="submit" name="set_mode" value="single" class="{{ 'active' if scan_mode == 'single' else '' }}">1 Scan = 1 Ticket</button>
+        </form>
+        <form method="POST" style="display:inline;">
+            <button type="submit" name="set_mode" value="bulk" class="{{ 'active' if scan_mode == 'bulk' else '' }}">Bulk (scan first + last)</button>
+        </form>
+    </div>
+    <p class="hint" style="text-align:center;">
+        {% if scan_mode == 'bulk' %}
+            <strong>Bulk mode:</strong> scan the first ticket and the last ticket of a run — the whole range is charged.
+        {% else %}
+            <strong>Single mode:</strong> scan each ticket as you sell it. For big holiday orders, switch to Bulk.
+        {% endif %}
+    </p>
+
+    <!-- Scan input -->
+    <div style="background: #e9ecef; padding: 20px; text-align: center; border-radius: 10px;">
+        <form id="scanForm" method="POST">
+            <label style="font-size: 1.2em; font-weight: bold;">Scan Ticket:</label><br>
+            <input type="text" name="barcode" id="scanBarcode" required autofocus placeholder="Scan Barcode Here…" style="font-size: 1.5em; padding: 10px; width: 60%; margin: 15px 0;">
+            <br>
+            <button type="submit" class="btn" style="background-color: #007bff; color: white;">Add to Cart</button>
+        </form>
+        <button type="button" id="sellCamBtn" class="btn" style="background-color: #0056b3; color: white; padding: 10px 20px; font-size: 1em;">📷 Scan with Camera</button>
+        <form method="POST" style="display:inline;">
+            <button type="submit" name="undo_last" value="1" class="btn" style="background-color: #ffc107; color: #333; padding: 10px 20px; font-size: 1em;">↩ Undo Last Scan</button>
+        </form>
+        <div id="sellReader" style="display:none; width:100%; max-width:360px; margin:12px auto 0; position: relative;"></div>
+    </div>
+
+    <!-- Live cart -->
+    {% if cart_display %}
+    <h3>Current Sale</h3>
+    <table>
+        <tr>
+            <th>Game</th>
+            <th>Scanned (in order)</th>
+            <th>Qty</th>
+            <th>Line Total</th>
+            <th></th>
+        </tr>
+        {% for item in cart_display %}
+        <tr>
+            <td style="text-align:left;">
+                {{ item.game_name }} <span style="color:#666;">#{{ item.game_number }}</span>
+                {% if item.mode == 'bulk' %}<span style="font-size:0.8em; color:#007bff;">(bulk)</span>{% endif %}
+            </td>
+            <td style="text-align:left;">
+                {% if item.mode == 'bulk' %}
+                    #{{ "%03d"|format(item.scans[0]) }} → #{{ "%03d"|format(item.scans[-1]) }}
+                    <span style="color:#666; font-size:0.85em;">(range #{{ "%03d"|format(item.min_t) }}–#{{ "%03d"|format(item.max_t) }})</span>
+                {% else %}
+                    {% for t in item.scans %}<span{% if loop.last %} style="font-weight:bold; color:#0056b3;"{% endif %}>#{{ "%03d"|format(t) }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+                {% endif %}
+            </td>
+            <td>{{ item.qty }}</td>
+            <td>${{ "%.2f"|format(item.line_total) }}</td>
+            <td>
+                <form method="POST" style="display:inline;">
+                    <button type="submit" name="remove_pack" value="{{ item.pack_id }}" style="color: red; cursor: pointer;">✕</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h3 style="text-align: right;">Total: ${{ "%.2f"|format(grand_total) }}</h3>
+
+    <div style="text-align: right; margin-top: 20px;">
+        <form method="POST" style="display: inline;">
+            <button type="submit" name="clear_cart" value="true" class="btn" style="background-color: #dc3545; color: white;">Clear Cart</button>
+        </form>
+        <form action="/process_cart" method="POST" style="display: inline;">
+            <button type="submit" class="btn" style="background-color: #28a745; color: white;">TOTAL OUT</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <script>
+        wireCamera('sellCamBtn', 'sellReader', 'scanBarcode', 'scanForm');
+    </script>
+</body>
+</html>
