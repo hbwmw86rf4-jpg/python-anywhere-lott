@@ -5,13 +5,15 @@
  *   - Dual Detection Engine:
  *       1. Native Web BarcodeDetector API (Hardware-accelerated decoding)
  *       2. Html5Qrcode / ZXing engine (Fallback for unsupported platforms/formats)
- *   - Safe Format Probing: Verifies browser supported enum formats before instantiating native detector (prevents TypeError crashes on iOS Safari)
- *   - Full HD 1080p video constraints with automatic fallback for low-end camera streams
- *   - Continuous autofocus and exposure compensation
- *   - Hardware torch / flashlight control (if device camera supports it)
- *   - Web Audio synthesizer scan beep + haptic vibration feedback
- *   - Dynamic rectangular ROI target frame overlay
- *   - Duplicate scan protection & race-condition-free form submission
+ *   - Default 2.0x Camera Zoom: Starts camera pre-zoomed to 2.0x so cashiers can hold tickets at a comfortable distance without blurring macro focus.
+ *   - Interactive Zoom Preset Buttons (1x, 2x, 3x) for instant focal adjustment.
+ *   - Safe Format Probing: Verifies browser supported enum formats before instantiating native detector (prevents TypeError crashes on iOS Safari).
+ *   - Full HD 1080p video constraints with automatic fallback for low-end camera streams.
+ *   - Continuous autofocus and exposure compensation.
+ *   - Hardware torch / flashlight control.
+ *   - Web Audio synthesizer scan beep + haptic vibration feedback.
+ *   - Dynamic rectangular ROI target frame overlay.
+ *   - Duplicate scan protection & race-condition-free form submission.
  */
 
 (function () {
@@ -56,7 +58,7 @@
     }
 
     /**
-     * Inject scanner UI styles (scan frame overlay, animated laser line, torch button).
+     * Inject scanner UI styles (scan frame overlay, animated laser line, torch & zoom buttons).
      */
     function injectStyles() {
         if (document.getElementById('lott-scanner-styles')) return;
@@ -99,11 +101,18 @@
                 text-align: center; color: #ffffff; font-size: 12px; font-weight: bold;
                 text-shadow: 0 1px 3px rgba(0,0,0,0.8); z-index: 6; pointer-events: none;
             }
-            .lott-torch-btn {
-                position: relative; z-index: 10; margin: 10px auto; display: block;
-                padding: 8px 16px; background: #333; color: #fff; border: 1px solid #666;
+            .lott-controls-bar {
+                display: flex; justify-content: center; align-items: center; gap: 8px;
+                margin: 10px auto; z-index: 10; relative; flex-wrap: wrap;
+            }
+            .lott-torch-btn, .lott-zoom-btn {
+                padding: 6px 14px; background: #333; color: #fff; border: 1px solid #666;
                 border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: background 0.2s;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: background 0.2s, transform 0.1s;
+            }
+            .lott-zoom-btn.active {
+                background: #007bff !important; border-color: #0056b3 !important;
+                box-shadow: 0 0 8px rgba(0,123,255,0.6);
             }
             .lott-video-preview {
                 width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 8px;
@@ -213,38 +222,79 @@
                 '<div class="lott-scan-corner br"></div>' +
                 '<div class="lott-scan-line"></div>' +
                 '</div>' +
-                '<div class="lott-scan-status">Center barcode inside frame</div>';
+                '<div class="lott-scan-status">Hold ticket 12-18 inches back</div>';
             return overlay;
         }
 
-        // Setup hardware torch toggle if supported by camera track
-        function setupTorch(track) {
+        // Setup hardware Torch & Zoom controls UI
+        function setupCameraHardwareControls(track) {
             if (!track || typeof track.getCapabilities !== 'function') return;
-            var capabilities = track.getCapabilities();
+            var capabilities = track.getCapabilities ? track.getCapabilities() : {};
+
+            var controlsBar = document.createElement('div');
+            controlsBar.className = 'lott-controls-bar';
+
+            // 1. Hardware Zoom Controls (Default 2.0x Zoom)
+            if (capabilities.zoom) {
+                var minZoom = capabilities.zoom.min || 1;
+                var maxZoom = capabilities.zoom.max || 5;
+                var defaultZoom = Math.min(2.0, maxZoom);
+
+                // Apply default 2.0x zoom automatically on start
+                try {
+                    track.applyConstraints({ advanced: [{ zoom: defaultZoom }] }).catch(function () {});
+                } catch (e) {}
+
+                var presets = [1.0, 2.0, 3.0];
+                presets.forEach(function (zVal) {
+                    if (zVal >= minZoom && zVal <= maxZoom) {
+                        var zBtn = document.createElement('button');
+                        zBtn.type = 'button';
+                        zBtn.className = 'lott-zoom-btn' + (zVal === defaultZoom ? ' active' : '');
+                        zBtn.innerHTML = '🔍 ' + zVal + 'x';
+                        zBtn.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            track.applyConstraints({ advanced: [{ zoom: zVal }] }).then(function () {
+                                var btns = controlsBar.querySelectorAll('.lott-zoom-btn');
+                                btns.forEach(function (b) { b.classList.remove('active'); });
+                                zBtn.classList.add('active');
+                            }).catch(function (err) {
+                                console.warn('Zoom apply error:', err);
+                            });
+                        });
+                        controlsBar.appendChild(zBtn);
+                    }
+                });
+            }
+
+            // 2. Torch (Flashlight) Control
             if (capabilities.torch) {
                 var torchBtn = document.createElement('button');
                 torchBtn.type = 'button';
                 torchBtn.className = 'lott-torch-btn';
-                torchBtn.innerHTML = '🔦 Flashlight OFF';
+                torchBtn.innerHTML = '🔦 Light OFF';
                 var torchState = false;
                 torchBtn.addEventListener('click', function (e) {
                     e.preventDefault();
                     e.stopPropagation();
                     torchState = !torchState;
-                    track.applyConstraints({
-                        advanced: [{ torch: torchState }]
-                    }).then(function () {
-                        torchBtn.innerHTML = torchState ? '💡 Flashlight ON' : '🔦 Flashlight OFF';
+                    track.applyConstraints({ advanced: [{ torch: torchState }] }).then(function () {
+                        torchBtn.innerHTML = torchState ? '💡 Light ON' : '🔦 Light OFF';
                         torchBtn.style.background = torchState ? '#e65100' : '#333';
                     }).catch(function (err) {
-                        console.warn('Torch constraint error:', err);
+                        console.warn('Torch error:', err);
                     });
                 });
-                reader.appendChild(torchBtn);
+                controlsBar.appendChild(torchBtn);
+            }
+
+            if (controlsBar.children.length > 0) {
+                reader.appendChild(controlsBar);
             }
         }
 
-        // Engine 1: Native BarcodeDetector API (Safe instantiation with format check)
+        // Engine 1: Native BarcodeDetector API
         async function startNativeScanner(stream) {
             var wantedFormats = ['code_128', 'itf', 'code_39', 'pdf417', 'data_matrix', 'upc_a', 'upc_e', 'ean_13', 'qr_code'];
             var safeFormats = [];
@@ -267,7 +317,6 @@
                 }
             }
 
-            // Fallback if native detector couldn't be initialized
             if (!barcodeDetector) {
                 if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
                 startHtml5QrcodeFallback();
@@ -291,7 +340,7 @@
             activeStream = stream;
 
             var track = stream.getVideoTracks()[0];
-            setupTorch(track);
+            setupCameraHardwareControls(track);
 
             function scanFrame() {
                 if (!running || !activeVideo) return;
@@ -329,7 +378,7 @@
             });
         }
 
-        // Engine 2: Html5Qrcode Engine (High HD resolution & dynamic ROI box)
+        // Engine 2: Html5Qrcode Fallback Engine
         function startHtml5QrcodeFallback() {
             if (typeof Html5Qrcode === 'undefined') {
                 reader.innerHTML = '<p style="color:#b00; padding:10px;">Scanner library missing. Please reload page.</p>';
@@ -364,7 +413,10 @@
                     facingMode: 'environment',
                     width: { ideal: 1920, min: 1280 },
                     height: { ideal: 1080, min: 720 },
-                    advanced: [{ focusMode: 'continuous' }]
+                    advanced: [
+                        { zoom: 2.0 },
+                        { focusMode: 'continuous' }
+                    ]
                 },
                 formatsToSupport: formats
             };
@@ -392,7 +444,6 @@
                 btn.textContent = '✋ Stop Camera';
             }).catch(function (err) {
                 console.warn('Html5Qrcode HD constraints failed, retrying basic constraints:', err);
-                // Fallback to basic camera constraints if device rejected HD constraints
                 html5QrInstance.start(
                     { facingMode: 'environment' },
                     { fps: 20, qrbox: { width: 280, height: 140 } },
@@ -419,35 +470,34 @@
 
             reader.style.display = 'block';
 
-            // Check if Native BarcodeDetector API is present
-            if ('BarcodeDetector' in window) {
-                var constraints = {
-                    video: {
-                        facingMode: { ideal: 'environment' },
-                        width: { ideal: 1920, min: 1280 },
-                        height: { ideal: 1080, min: 720 },
-                        advanced: [
-                            { focusMode: 'continuous' },
-                            { exposureMode: 'continuous' }
-                        ]
-                    }
-                };
+            // High HD Video Constraints + Default 2.0x Zoom
+            var constraints = {
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1920, min: 1280 },
+                    height: { ideal: 1080, min: 720 },
+                    advanced: [
+                        { zoom: 2.0 },
+                        { focusMode: 'continuous' },
+                        { exposureMode: 'continuous' }
+                    ]
+                }
+            };
 
+            if ('BarcodeDetector' in window) {
                 navigator.mediaDevices.getUserMedia(constraints).then(function (stream) {
                     running = true;
                     startNativeScanner(stream);
                 }).catch(function (err) {
-                    console.warn('1080p stream request failed, retrying default constraints:', err);
+                    console.warn('2.0x 1080p stream request failed, retrying default stream:', err);
                     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (stream) {
                         running = true;
                         startNativeScanner(stream);
                     }).catch(function () {
-                        // Fallback to html5-qrcode
                         startHtml5QrcodeFallback();
                     });
                 });
             } else {
-                // Device/Browser doesn't have native BarcodeDetector API -> use high-res Html5Qrcode
                 startHtml5QrcodeFallback();
             }
         });
