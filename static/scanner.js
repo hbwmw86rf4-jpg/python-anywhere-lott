@@ -566,8 +566,9 @@
 
         function handleSuccessfulScan(decodedText) {
             var now = Date.now();
-            if (lastScan.code === decodedText && (now - lastScan.ts) < 1800) {
-                return; // Suppress rapid duplicate scans
+            // Prevent scanning the exact same ticket twice while the camera is open
+            if (lastScan.code === decodedText) {
+                return; 
             }
             lastScan.code = decodedText;
             lastScan.ts = now;

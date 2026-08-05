@@ -152,8 +152,23 @@
     </div>
 
     <script>
+        // Initialize camera scanner buttons
         wireCamera('shiftCamBtn', 'shiftReader', 'scanned_barcode', 'autoForm');
         wireCamera('returnCamBtn', 'returnReader', 'returnBarcode', 'returnForm');
+
+        // Restore caret focus depending on the section we are in
+        window.addEventListener('load', function() {
+            if (window.location.hash === '#shift-reading') {
+                var el = document.getElementById('scanned_barcode');
+                if (el) { el.focus(); }
+            } else if (window.location.hash === '#return-rep') {
+                var el = document.getElementById('returnBarcode');
+                if (el) { el.focus(); }
+            } else {
+                var el = document.getElementById('scanned_barcode');
+                if (el) { el.focus(); }
+            }
+        });
     </script>
 </body>
 </html>
