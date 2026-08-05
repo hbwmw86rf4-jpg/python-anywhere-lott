@@ -135,7 +135,10 @@ def parse_ticket_barcode(raw):
     """Parse a scanned lottery barcode into (game_num, pack_id, ticket_num).
     Returns None if the barcode is too short to be valid."""
     raw = (raw or '').strip()
-    if len(raw) < 12:
+    # IL Lottery scratch ticket barcodes are exactly 14 digits (ITF-14).
+    # Enforcing strict length prevents partial or upside-down inverted reads 
+    # from being parsed as valid barcodes.
+    if len(raw) != 14 or not raw.isdigit():
         return None
 
     clean_barcode = raw[:-2]
@@ -716,11 +719,17 @@ def games_management():
     ''', (cutoff,)).fetchall()
     employees = conn.execute('SELECT * FROM employees ORDER BY name ASC').fetchall()
     pending_returns = fetch_pending_returns(conn)
+    active_packs = conn.execute('''
+        SELECT p.*, COALESCE(g.name, '⚠ Unknown game #' || p.game_number) AS name
+        FROM packs p LEFT JOIN games g ON p.game_number = g.game_number
+        WHERE p.status = "DISPENSER"
+        ORDER BY p.slot_number, p.slot_label
+    ''').fetchall()
     conn.close()
     prefill_game = session.pop('prefill_game', '')
     return render_template('games.html', games=games, backroom=backroom_packs,
                            employees=employees, prefill_game=prefill_game,
-                           pending_returns=pending_returns)
+                           pending_returns=pending_returns, active_packs=active_packs)
 
 
 @app.route('/delete_employee', methods=['POST'])
@@ -914,6 +923,29 @@ def activate_pack():
     log_change(current_actor(), 'INVENTORY', 'ACTIVATE_PACK', pack_id,
                old_value='BACKROOM', new_value=f"DISPENSER slot {new_label}")
     flash(f"Pack {pack_id} is now ACTIVE in Slot {new_label}!", "success")
+    return redirect(url_for('games_management'))
+
+
+@app.route('/deactivate_pack', methods=['POST'])
+@manager_required
+def deactivate_pack():
+    pack_id = request.form['pack_id']
+    conn = get_db_connection()
+    pack = conn.execute('SELECT slot_label FROM packs WHERE pack_id = ? AND status = "DISPENSER"', (pack_id,)).fetchone()
+    
+    if not pack:
+        conn.close()
+        flash(f"Pack {pack_id} is not currently active in a dispenser.", "danger")
+        return redirect(url_for('games_management'))
+        
+    old_slot = pack['slot_label']
+    conn.execute('UPDATE packs SET status = "BACKROOM", slot_number = NULL, slot_label = NULL WHERE pack_id = ?', (pack_id,))
+    conn.commit()
+    conn.close()
+    
+    log_change(current_actor(), 'INVENTORY', 'DEACTIVATE_PACK', pack_id,
+               old_value=f"DISPENSER slot {old_slot}", new_value='BACKROOM')
+    flash(f"Pack {pack_id} removed from slot {old_slot} and returned to Backroom Stock.", "success")
     return redirect(url_for('games_management'))
 
 

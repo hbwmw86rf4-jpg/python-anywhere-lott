@@ -97,6 +97,46 @@
     }
 
     /**
+     * Synthesize a dissonant, low-pitch error buzz using Web Audio API.
+     */
+    function playErrorBeep() {
+        try {
+            var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            if (!sharedAudioCtx) {
+                sharedAudioCtx = new AudioContextClass();
+            }
+            if (sharedAudioCtx.state === 'suspended') {
+                sharedAudioCtx.resume();
+            }
+            var ctx = sharedAudioCtx;
+            var osc = ctx.createOscillator();
+            var osc2 = ctx.createOscillator();
+            var gain = ctx.createGain();
+            
+            // Dissonant frequencies for an "error" sound
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, ctx.currentTime);
+            osc2.type = 'square';
+            osc2.frequency.setValueAtTime(160, ctx.currentTime);
+            
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            
+            osc.connect(gain);
+            osc2.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start();
+            osc2.start();
+            osc.stop(ctx.currentTime + 0.3);
+            osc2.stop(ctx.currentTime + 0.3);
+        } catch (e) {
+            /* ignore */
+        }
+    }
+
+    /**
      * Trigger tactile haptic vibration feedback on mobile devices.
      */
     function triggerHaptic() {
@@ -556,10 +596,32 @@
 
         function handleSuccessfulScan(decodedText) {
             var now = Date.now();
+            decodedText = (decodedText || '').trim();
+            
             // Prevent scanning the exact same ticket twice while the camera is open
             if (lastScan.code === decodedText) {
                 return; 
             }
+            
+            var statusEl = reader.querySelector('.lott-scan-status');
+
+            // Pre-validation: Must be exactly 14 digits (IL Lottery Format)
+            if (decodedText.length !== 14 || !/^\d+$/.test(decodedText)) {
+                lastScan.code = decodedText; // temporarily ignore this garbage string
+                lastScan.ts = now;
+                playErrorBeep();
+                triggerHaptic();
+                if (statusEl) {
+                    statusEl.textContent = '❌ Invalid Barcode (' + decodedText.length + ' chars)';
+                    statusEl.style.color = '#ff4d4d';
+                    setTimeout(function() {
+                        statusEl.textContent = 'Hold ticket 12-18 inches back';
+                        statusEl.style.color = '#ffffff';
+                    }, 2000);
+                }
+                return;
+            }
+
             lastScan.code = decodedText;
             lastScan.ts = now;
             hasScannedCount++;
