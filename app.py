@@ -1304,7 +1304,11 @@ def export_change_log_pdf():
 
 def pdf_to_bytes(pdf):
     """Helper to convert FPDF instance to bytes for Response output."""
-    out = pdf.output()
+    try:
+        out = pdf.output(dest='S')
+    except TypeError:
+        out = pdf.output()
+        
     if isinstance(out, (bytes, bytearray)):
         return bytes(out)
     return str(out).encode('latin1')
@@ -1466,7 +1470,7 @@ def complete_shift():
     conn.commit()
     conn.close()
     flash(f"Shift signed off and logged by {cashier} at {timestamp}.", "success")
-    return redirect(url_for('shift_reconciliation'))
+    return redirect(url_for('index'))
 
 
 @app.route('/backup_database')
