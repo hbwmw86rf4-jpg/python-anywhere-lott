@@ -582,33 +582,24 @@
                 inputEl.value = decodedText;
             }
 
-            // Perform continuous background scan via AJAX (keeps camera ON, 0 permission prompts)
+            // Submit the form natively so the page reloads with flash messages
             var form = document.getElementById(formId);
             if (form) {
-                var formData = new FormData(form);
-                formData.set('barcode', decodedText);
-                fetch(form.action || window.location.href, {
-                    method: 'POST',
-                    body: formData,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                }).then(function (res) {
-                    return res.json().catch(function () { return { success: true, message: 'Scanned ' + decodedText }; });
-                }).then(function (data) {
-                    if (statusEl && data && data.message) {
-                        statusEl.textContent = (data.success ? '✓ ' : '⚠️ ') + data.message;
-                        statusEl.style.color = data.success ? '#39ff14' : '#ff4d4d';
-                    }
-                }).catch(function () {});
-            }
-
-            // Keep camera running continuously! Reset overlay status after 1.5s
-            setTimeout(function () {
-                if (frame) frame.classList.remove('success');
-                if (statusEl) {
-                    statusEl.textContent = 'Ready for next ticket scan...';
-                    statusEl.style.color = '#ffffff';
+                // Ensure the input field has the decoded text
+                var inputEl = document.getElementById(inputId) || form.querySelector('input[name="barcode"]');
+                if (inputEl) {
+                    inputEl.value = decodedText;
                 }
-            }, 1500);
+                
+                // Provide visual feedback before reloading
+                if (statusEl) {
+                    statusEl.textContent = 'Submitting...';
+                    statusEl.style.color = '#39ff14';
+                }
+                
+                // Submit form
+                form.submit();
+            }
         }
 
         // Add visual overlay to container
