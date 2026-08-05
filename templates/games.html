@@ -258,8 +258,26 @@
     </form>
 </div>
 
+<!-- Backup & Restore -->
+<div class="section" style="border-left: 5px solid #17a2b8; margin-top: 40px;">
+    <h2>💾 Backup & Restore Database</h2>
+    <div style="display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap;">
+        <div>
+            <p style="margin-top:0; color:#555;">Download a copy of your current inventory and history.</p>
+            <a href="/backup_database" style="background: #17a2b8; color: white; padding: 10px 15px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">💾 Download Backup</a>
+        </div>
+        <div style="border-left: 2px solid #eee; padding-left: 30px;">
+            <p style="margin-top:0; color:#dc3545; font-weight:bold;">Restore from a `.db` backup file</p>
+            <form action="/restore_database" method="POST" enctype="multipart/form-data" onsubmit="return confirm('WARNING: This will completely overwrite your current live database with the backup file. ALL current data will be lost. Continue?');">
+                <input type="file" name="db_file" accept=".db" required style="font-size: 13px; margin-bottom: 8px; display: block;">
+                <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 8px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">Upload & Restore Backup</button>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- DANGER ZONE -->
-<div class="section" style="border-left: 5px solid #dc3545; margin-top: 40px; background-color: #fff3f3;">
+<div class="section" style="border-left: 5px solid #dc3545; margin-top: 20px; background-color: #fff3f3;">
     <h2 style="color: #dc3545;">⚠️ Danger Zone: Wipe Inventory Data</h2>
     <p style="color: #555;">This will permanently delete all active dispenser packs, backroom stock, and audit histories. <strong>Your games catalog and cashiers will NOT be deleted.</strong></p>
 

@@ -1516,6 +1516,32 @@ def backup_database():
         return redirect(url_for('games_management'))
 
 
+@app.route('/restore_database', methods=['POST'])
+@manager_required
+def restore_database():
+    """Upload a .db file to completely overwrite the current database."""
+    if 'db_file' not in request.files:
+        flash("No file part in the request.", "danger")
+        return redirect(url_for('games_management'))
+        
+    file = request.files['db_file']
+    if file.filename == '':
+        flash("No file selected for uploading.", "danger")
+        return redirect(url_for('games_management'))
+        
+    if file and file.filename.endswith('.db'):
+        try:
+            # Overwrite the live database file
+            file.save(DB_PATH)
+            flash("Database successfully restored from backup!", "success")
+        except Exception as e:
+            flash(f"Error restoring database: {e}", "danger")
+    else:
+        flash("Invalid file format. Must be a .db file.", "danger")
+        
+    return redirect(url_for('games_management'))
+
+
 @app.route('/github_webhook', methods=['GET', 'POST'])
 def github_webhook():
     """
