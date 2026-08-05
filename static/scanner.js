@@ -123,7 +123,7 @@
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
                 width: 85%; height: 50%; max-width: 320px; max-height: 160px;
-                border: 2px solid #00ff00; border-radius: 8px;
+                border: 2px solid #ffffff; border-radius: 8px;
                 box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
                 transition: border-color 0.15s ease, box-shadow 0.15s ease;
             }
@@ -131,21 +131,11 @@
                 border-color: #39ff14 !important;
                 box-shadow: 0 0 25px #39ff14, 0 0 0 9999px rgba(0, 0, 0, 0.45) !important;
             }
-            .lott-scan-corner { position: absolute; width: 18px; height: 18px; border: 3px solid #00ff00; }
+            .lott-scan-corner { position: absolute; width: 18px; height: 18px; border: 3px solid #ffffff; }
             .lott-scan-corner.tl { top: -3px; left: -3px; border-right: none; border-bottom: none; }
             .lott-scan-corner.tr { top: -3px; right: -3px; border-left: none; border-bottom: none; }
             .lott-scan-corner.bl { bottom: -3px; left: -3px; border-right: none; border-top: none; }
             .lott-scan-corner.br { bottom: -3px; right: -3px; border-left: none; border-top: none; }
-            .lott-scan-line {
-                position: absolute; top: 0; left: 0; width: 100%; height: 2px;
-                background: #00ff00; box-shadow: 0 0 8px #00ff00;
-                animation: lott-scan-anim 2s infinite ease-in-out;
-            }
-            @keyframes lott-scan-anim {
-                0% { top: 5%; opacity: 0.6; }
-                50% { top: 90%; opacity: 1; }
-                100% { top: 5%; opacity: 0.6; }
-            }
             .lott-scan-status {
                 position: absolute; bottom: 8px; left: 0; width: 100%;
                 text-align: center; color: #ffffff; font-size: 12px; font-weight: bold;
@@ -631,7 +621,6 @@
                 '<div class="lott-scan-corner tr"></div>' +
                 '<div class="lott-scan-corner bl"></div>' +
                 '<div class="lott-scan-corner br"></div>' +
-                '<div class="lott-scan-line"></div>' +
                 '</div>' +
                 '<div class="lott-scan-status">Hold ticket 12-18 inches back</div>';
             return overlay;
@@ -761,7 +750,6 @@
                             var code = barcodes[0].rawValue;
                             if (code) {
                                 handleSuccessfulScan(code);
-                                return;
                             }
                         }
                         if (running) {
