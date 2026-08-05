@@ -154,7 +154,9 @@
         <form method="POST">
             <button type="submit" name="clear_cart" value="1" class="btn" style="background-color: #dc3545; color: white; padding: 10px 20px; font-size: 1em;" onsubmit="return confirm('Clear entire cart?');">Clear Cart</button>
         </form>
-        <a href="/checkout" class="btn" style="background-color: #28a745; color: white; text-align: center;">Finish & Complete Sale (${{ "%.2f"|format(grand_total) }}) →</a>
+        <form action="/process_cart" method="POST">
+            <button type="submit" class="btn" style="background-color: #28a745; color: white; text-align: center; font-size: 1em; padding: 10px 20px; border: none; cursor: pointer;">Finish & Complete Sale (${{ "%.2f"|format(grand_total) }}) →</button>
+        </form>
     </div>
     {% endif %}
 
