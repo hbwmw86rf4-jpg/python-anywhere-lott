@@ -7,7 +7,7 @@ import os
 from functools import wraps
 from fpdf import FPDF
 import barcode
-from barcode.writer import ImageWriter
+from barcode.writer import SVGWriter
 
 # Anchor all file paths to this file's own directory so the app works no matter
 # what the current working directory is (matters for WSGI hosts like
@@ -288,7 +288,7 @@ def shift_scan():
         if is_ajax:
             return jsonify({'success': False, 'message': msg})
         flash(msg, "danger")
-        return redirect(url_for('index'))
+        return redirect(url_for('index') + '#shift-reading')
 
     game_num, pack_id, ticket_num = parsed
 
@@ -302,7 +302,7 @@ def shift_scan():
         if is_ajax:
             return jsonify({'success': False, 'message': msg})
         flash(msg, "danger")
-        return redirect(url_for('index'))
+        return redirect(url_for('index') + '#shift-reading')
 
     error = validate_reading(ticket_num, pack['current_ticket'])
     if error:
@@ -311,7 +311,7 @@ def shift_scan():
         if is_ajax:
             return jsonify({'success': False, 'message': msg})
         flash(msg, "danger")
-        return redirect(url_for('index'))
+        return redirect(url_for('index') + '#shift-reading')
 
     tickets_sold = pack['current_ticket'] - ticket_num
     cash_expected = tickets_sold * game['price']
@@ -329,7 +329,7 @@ def shift_scan():
         return jsonify({'success': True, 'message': msg, 'pack_id': pack_id, 'tickets_sold': tickets_sold, 'cash_expected': cash_expected})
 
     flash(f"Shift reading logged for {pack_id}: {tickets_sold} sold (${cash_expected:.2f}).", "success")
-    return redirect(url_for('index'))
+    return redirect(url_for('index') + '#shift-reading')
 
 
 @app.route('/shift_reading_manual', methods=['POST'])
@@ -430,18 +430,18 @@ def return_pack():
     # Same trigger-finger guards as receiving.
     if len(raw) > MAX_BARCODE_LEN:
         flash("That scan looks too long — likely a double-scan. Please scan again.", "danger")
-        return redirect(url_for('index'))
+        return redirect(url_for('index') + '#return-rep')
     now_ts = datetime.datetime.now().timestamp()
     last = session.get('last_return')
     if last and last.get('code') == raw and (now_ts - last.get('ts', 0)) < 2:
         flash("Ignored a duplicate scan.", "info")
-        return redirect(url_for('index'))
+        return redirect(url_for('index') + '#return-rep')
     session['last_return'] = {'code': raw, 'ts': now_ts}
 
     parsed = parse_ticket_barcode(raw)
     if not parsed:
         flash("Invalid barcode.", "danger")
-        return redirect(url_for('index'))
+        return redirect(url_for('index') + '#return-rep')
     game_num, pack_id, _ = parsed
 
     conn = get_db_connection()
@@ -449,7 +449,7 @@ def return_pack():
     if not pack or pack['status'] not in ('BACKROOM', 'DISPENSER'):
         conn.close()
         flash(f"Pack {pack_id} isn't available to return (must be in backroom or dispenser).", "danger")
-        return redirect(url_for('index'))
+        return redirect(url_for('index') + '#return-rep')
 
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn.execute('UPDATE packs SET status = "RETURN_PENDING", returned_by = ?, returned_at = ? WHERE pack_id = ?',
@@ -461,7 +461,7 @@ def return_pack():
                old_value=pack['status'], new_value='RETURN_PENDING',
                details='awaiting manager confirmation')
     flash(f"Return recorded for {pack_id}. 📸 Photograph the rep's receipt and text it to the work group.", "success")
-    return redirect(url_for('index'))
+    return redirect(url_for('index') + '#return-rep')
 
 
 @app.route('/sell_lottery', methods=['GET', 'POST'])
@@ -676,7 +676,7 @@ def pos_checkout(amount):
         barcode_data = f"{prefix}{plu}{price_str}"
 
         os.makedirs(STATIC_DIR, exist_ok=True)
-        upc = barcode.get('upca', barcode_data, writer=ImageWriter())
+        upc = barcode.get('upca', barcode_data, writer=SVGWriter())
         upc.save(os.path.join(STATIC_DIR, 'checkout_barcode'))
 
         return render_template('pos_checkout.html', total=f"{total_dollars:.2f}",
@@ -1131,9 +1131,11 @@ def export_shift():
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Cashier Shift Sales Report", ln=True, align='C')
+    pdf.cell(0, 10, "Cashier Shift Sales Report", align='C')
+    pdf.ln(10)
     pdf.set_font("Arial", '', 9)
-    pdf.cell(0, 6, f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+    pdf.cell(0, 6, f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", align='C')
+    pdf.ln(6)
     pdf.ln(3)
 
     def header_row():
@@ -1168,7 +1170,8 @@ def export_shift():
             cashier_total = 0
             cashier_tickets = 0
             pdf.set_font("Arial", 'B', 11)
-            pdf.cell(0, 8, f"Cashier: {current_name}", ln=True)
+            pdf.cell(0, 8, f"Cashier: {current_name}")
+            pdf.ln(8)
             header_row()
 
         pdf.set_font("Arial", '', 9)
@@ -1265,9 +1268,11 @@ def export_change_log_pdf():
     pdf = FPDF(orientation='L')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Inventory & Games Change Log", ln=True, align='C')
+    pdf.cell(0, 10, "Inventory & Games Change Log", align='C')
+    pdf.ln(10)
     pdf.set_font("Arial", '', 9)
-    pdf.cell(0, 6, f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+    pdf.cell(0, 6, f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", align='C')
+    pdf.ln(6)
     pdf.ln(2)
 
     pdf.set_font("Arial", 'B', 8)
@@ -1396,9 +1401,11 @@ def shift_reconciliation_pdf():
     pdf = FPDF(orientation='L')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Store Lottery Shift Reconciliation Report", ln=True, align='C')
+    pdf.cell(0, 10, "Store Lottery Shift Reconciliation Report", align='C')
+    pdf.ln(10)
     pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 6, f"Generated: {data['timestamp']} | Cashier: {session.get('cashier_name', 'Staff')} | Sorted By: {sort_desc}", ln=True, align='C')
+    pdf.cell(0, 6, f"Generated: {data['timestamp']} | Cashier: {session.get('cashier_name', 'Staff')} | Sorted By: {sort_desc}", align='C')
+    pdf.ln(6)
     pdf.ln(4)
 
     # Summary Cards Box
@@ -1439,7 +1446,8 @@ def shift_reconciliation_pdf():
     # Digital Verification Badge
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 8, f"Digital Audit Record - Logged by {session.get('cashier_name', 'Staff')} on {data['timestamp']}", ln=True, align='C')
+    pdf.cell(0, 8, f"Digital Audit Record - Logged by {session.get('cashier_name', 'Staff')} on {data['timestamp']}", align='C')
+    pdf.ln(8)
 
     filename = f"Shift_Reconciliation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     return Response(pdf_to_bytes(pdf), mimetype="application/pdf",
@@ -1449,7 +1457,7 @@ def shift_reconciliation_pdf():
 @app.route('/complete_shift', methods=['POST'])
 def complete_shift():
     conn = get_db_connection()
-    cashier = get_current_actor()
+    cashier = current_actor()
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn.execute('''
         INSERT INTO change_log (timestamp, actor, category, action, target, details)

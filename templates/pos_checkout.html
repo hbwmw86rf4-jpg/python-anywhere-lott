@@ -18,7 +18,7 @@
 <div class="barcode-container">
     <div class="total-price">Total: ${{ total }}</div>
 
-    <img src="{{ url_for('static', filename='checkout_barcode.png') }}" class="barcode-img" alt="Scan at Register">
+    <img src="{{ url_for('static', filename='checkout_barcode.svg') }}" class="barcode-img" alt="Scan at Register">
 
     <!-- NEW: Receipt Tally -->
     <div style="margin-top: 30px; text-align: left; background: #f1f1f1; padding: 15px; border-radius: 8px;">
@@ -29,20 +29,12 @@
         {% endfor %}
         </ul>
     </div>
+    
+    <p style="color: #666; font-size: 1.2em; margin-top: 20px;">Scan this code with the main register scanner.</p>
 </div>
 
 <!-- Updated routing: Go back to sales floor, not shift tracker! -->
 <a href="/sell_lottery" class="btn-return">Complete & Next Customer</a>
-    <div class="barcode-container">
-        <div class="total-price">Total: ${{ total }}</div>
-
-        <!-- Display the generated barcode image -->
-        <img src="{{ url_for('static', filename='checkout_barcode.png') }}" class="barcode-img" alt="Scan at Register">
-
-        <p style="color: #666; font-size: 1.2em; margin-top: 20px;">Scan this code with the main register scanner.</p>
-    </div>
-
-    <a href="/" class="btn-return">Complete & Return</a>
 
 </body>
 </html>
