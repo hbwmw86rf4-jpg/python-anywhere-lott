@@ -4,6 +4,7 @@ import datetime
 import csv
 import io
 import os
+import re
 from functools import wraps
 from fpdf import FPDF
 import barcode
