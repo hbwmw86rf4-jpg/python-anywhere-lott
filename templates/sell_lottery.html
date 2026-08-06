@@ -40,125 +40,126 @@
         </div>
     </div>
 
-    {% set msgs = get_flashed_messages(with_categories=true) %}
-    {% set ns = namespace(error=false) %}
-    {% if msgs %}
-      <div style="max-width: 600px; margin: 10px auto;">
-      {% for category, message in msgs %}
-        {% if category == 'danger' %}{% set ns.error = true %}{% endif %}
-        <div style="padding: 15px; margin-bottom: 10px; border-radius: 5px; text-align: center; font-weight: bold; font-size: 1.1em;
-                    {% if category == 'danger' %}background-color: #f8d7da; color: #721c24; border: 2px solid #dc3545;
-                    {% elif category == 'info' %}background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb;
-                    {% else %}background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
-          {{ message }}
-        </div>
-      {% endfor %}
-      </div>
-    {% endif %}
-    {% if ns.error %}
-    <script>
-        // Audible cue so a rejected scan isn't missed during fast scanning.
-        (function () {
-            try {
-                var ctx = new (window.AudioContext || window.webkitAudioContext)();
-                var o = ctx.createOscillator(), g = ctx.createGain();
-                o.connect(g); g.connect(ctx.destination);
-                o.type = 'square'; o.frequency.value = 220; g.gain.value = 0.2;
-                o.start(); setTimeout(function () { o.stop(); ctx.close(); }, 250);
-            } catch (e) { /* audio may be blocked; the red banner still shows */ }
-        })();
-    </script>
-    {% endif %}
-
-    <h2 style="text-align: center; font-size: 1.5em; margin: 10px 0;">Sell Lottery</h2>
-
-    <!-- Scan mode toggle -->
-    <div class="mode-toggle">
-        <form method="POST" style="display:inline;">
-            <button type="submit" name="set_mode" value="single" class="{{ 'active' if scan_mode == 'single' else '' }}">1 Scan = 1 Ticket</button>
-        </form>
-        <form method="POST" style="display:inline;">
-            <button type="submit" name="set_mode" value="bulk" class="{{ 'active' if scan_mode == 'bulk' else '' }}">Bulk (scan first + last)</button>
-        </form>
-    </div>
-    <p class="hint" style="text-align:center;">
-        {% if scan_mode == 'bulk' %}
-            <strong>Bulk mode:</strong> scan the first ticket and the last ticket of a run — the whole range is charged.
-        {% else %}
-            <strong>Single mode:</strong> scan each ticket as you sell it. For big holiday orders, switch to Bulk.
-        {% endif %}
-    </p>
-
-    <!-- Scan input -->
-    <div style="background: white; padding: 20px; text-align: center; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
-        <form id="undoForm" method="POST" style="display:none;">
-            <input type="hidden" name="undo_last" value="1">
-        </form>
-
-        <form id="scanForm" method="POST">
-            <label style="font-size: 1.2em; font-weight: bold;">Scan Ticket Barcode:</label><br>
-            <input type="text" name="barcode" id="scanBarcode" required autofocus placeholder="Scan Barcode Here…" style="font-size: 1.3em; padding: 12px; width: 85%; max-width: 380px; margin: 12px 0; border: 2px solid #007bff; border-radius: 6px; text-align: center;">
-            
-            <div class="scan-action-grid">
-                <button type="submit" class="scan-action-btn" style="background-color: #007bff; color: white;">➕ Add to Cart</button>
-                <button type="button" id="sellCamBtn" class="scan-action-btn" style="background-color: #0056b3; color: white;">📷 Scan Camera</button>
-                <button type="button" id="sellManualBtn" class="scan-action-btn" style="background-color: #28a745; color: white;">⌨ Manual Entry</button>
-                <button type="submit" form="undoForm" class="scan-action-btn" style="background-color: #ffc107; color: #333;">↩ Undo Scan</button>
+    <div id="cartSection">
+        {% set msgs = get_flashed_messages(with_categories=true) %}
+        {% set ns = namespace(error=false) %}
+        {% if msgs %}
+          <div style="max-width: 600px; margin: 10px auto;">
+          {% for category, message in msgs %}
+            {% if category == 'danger' %}{% set ns.error = true %}{% endif %}
+            <div style="padding: 15px; margin-bottom: 10px; border-radius: 5px; text-align: center; font-weight: bold; font-size: 1.1em;
+                        {% if category == 'danger' %}background-color: #f8d7da; color: #721c24; border: 2px solid #dc3545;
+                        {% elif category == 'info' %}background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb;
+                        {% else %}background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;{% endif %}">
+              {{ message }}
             </div>
-        </form>
-        <div id="sellReader" style="display:none; width:100%; max-width:360px; margin:12px auto 0; position: relative;"></div>
-    </div>
+          {% endfor %}
+          </div>
+        {% endif %}
+        {% if ns.error %}
+        <script>
+            (function () {
+                try {
+                    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    var o = ctx.createOscillator(), g = ctx.createGain();
+                    o.connect(g); g.connect(ctx.destination);
+                    o.type = 'square'; o.frequency.value = 220; g.gain.value = 0.2;
+                    o.start(); setTimeout(function () { o.stop(); ctx.close(); }, 250);
+                } catch (e) {}
+            })();
+        </script>
+        {% endif %}
 
-    <!-- Live cart -->
-    {% if cart_display %}
-    <h3>Current Sale</h3>
-    <table>
-        <tr>
-            <th>Game</th>
-            <th>Scanned (in order)</th>
-            <th>Qty</th>
-            <th>Line Total</th>
-            <th></th>
-        </tr>
-        {% for item in cart_display %}
-        <tr>
-            <td>
-                <strong>{{ item.game_name }}</strong><br>
-                <span style="font-size:0.85em; color:#666;">Game #{{ item.game_number }} · Pack {{ item.pack_id }}</span>
-            </td>
-            <td>
-                <span style="font-family: monospace; font-size: 1.1em; color: #0056b3; font-weight: bold;">
-                    {{ item.scans_str }}
-                </span>
-                {% if item.mode == 'bulk' %}
-                    <br><span style="font-size:0.8em; color:#28a745; font-weight:bold;">BULK RANGE</span>
-                {% endif %}
-            </td>
-            <td><strong>{{ item.qty }}</strong></td>
-            <td><strong style="color: #2e7d32;">${{ "%.2f"|format(item.line_total) }}</strong></td>
-            <td>
-                <form method="POST" style="display:inline;">
-                    <button type="submit" name="remove_pack" value="{{ item.pack_id }}" style="color: red; cursor: pointer; background: none; border: none; font-size: 1.2em;">❌</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-        <tr style="background: #e9ecef; font-size: 1.2em; font-weight: bold;">
-            <td colspan="3" style="text-align: right;">TOTAL:</td>
-            <td style="color: #2e7d32;">${{ "%.2f"|format(grand_total) }}</td>
-            <td></td>
-        </tr>
-    </table>
+        <h2 style="text-align: center; font-size: 1.5em; margin: 10px 0;">Sell Lottery</h2>
 
-    <div style="margin-top: 20px; display: flex; gap: 15px; justify-content: flex-end;">
-        <form method="POST">
-            <button type="submit" name="clear_cart" value="1" class="btn" style="background-color: #dc3545; color: white; padding: 10px 20px; font-size: 1em;" onsubmit="return confirm('Clear entire cart?');">Clear Cart</button>
-        </form>
-        <form action="/process_cart" method="POST">
-            <button type="submit" class="btn" style="background-color: #28a745; color: white; text-align: center; font-size: 1em; padding: 10px 20px; border: none; cursor: pointer;">Finish & Complete Sale (${{ "%.2f"|format(grand_total) }}) →</button>
-        </form>
+        <!-- Scan mode toggle -->
+        <div class="mode-toggle">
+            <form method="POST" style="display:inline;">
+                <button type="submit" name="set_mode" value="single" class="{{ 'active' if scan_mode == 'single' else '' }}">1 Scan = 1 Ticket</button>
+            </form>
+            <form method="POST" style="display:inline;">
+                <button type="submit" name="set_mode" value="bulk" class="{{ 'active' if scan_mode == 'bulk' else '' }}">Bulk (scan first + last)</button>
+            </form>
+        </div>
+        <p class="hint" style="text-align:center;">
+            {% if scan_mode == 'bulk' %}
+                <strong>Bulk mode:</strong> scan the first ticket and the last ticket of a run — the whole range is charged.
+            {% else %}
+                <strong>Single mode:</strong> scan each ticket as you sell it. For big holiday orders, switch to Bulk.
+            {% endif %}
+        </p>
+
+        <!-- Scan input -->
+        <div style="background: white; padding: 20px; text-align: center; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+            <form id="undoForm" method="POST" style="display:none;">
+                <input type="hidden" name="undo_last" value="1">
+            </form>
+
+            <form id="scanForm" method="POST">
+                <label style="font-size: 1.2em; font-weight: bold;">Scan Ticket Barcode:</label><br>
+                <input type="text" name="barcode" id="scanBarcode" required autofocus autocomplete="off" placeholder="Scan Barcode Here…" style="font-size: 1.3em; padding: 12px; width: 85%; max-width: 380px; margin: 12px 0; border: 2px solid #007bff; border-radius: 6px; text-align: center;">
+                
+                <div class="scan-action-grid">
+                    <button type="submit" class="scan-action-btn" style="background-color: #007bff; color: white;">➕ Add to Cart</button>
+                    <button type="button" id="sellCamBtn" class="scan-action-btn" style="background-color: #0056b3; color: white;">📷 Scan Camera</button>
+                    <button type="button" id="sellManualBtn" class="scan-action-btn" style="background-color: #28a745; color: white;">⌨ Manual Entry</button>
+                    <button type="submit" form="undoForm" class="scan-action-btn" style="background-color: #ffc107; color: #333;">↩ Undo Scan</button>
+                </div>
+            </form>
+            <div id="sellReader" style="display:none; width:100%; max-width:360px; margin:12px auto 0; position: relative;"></div>
+        </div>
+
+        <!-- Live cart -->
+        {% if cart_display %}
+        <h3>Current Sale</h3>
+        <table>
+            <tr>
+                <th>Game</th>
+                <th>Scanned (in order)</th>
+                <th>Qty</th>
+                <th>Line Total</th>
+                <th></th>
+            </tr>
+            {% for item in cart_display %}
+            <tr>
+                <td>
+                    <strong>{{ item.game_name }}</strong><br>
+                    <span style="font-size:0.85em; color:#666;">Game #{{ item.game_number }} · Pack {{ item.pack_id }}</span>
+                </td>
+                <td>
+                    <span style="font-family: monospace; font-size: 1.1em; color: #0056b3; font-weight: bold;">
+                        {{ item.scans_str }}
+                    </span>
+                    {% if item.mode == 'bulk' %}
+                        <br><span style="font-size:0.8em; color:#28a745; font-weight:bold;">BULK RANGE</span>
+                    {% endif %}
+                </td>
+                <td><strong>{{ item.qty }}</strong></td>
+                <td><strong style="color: #2e7d32;">${{ "%.2f"|format(item.line_total) }}</strong></td>
+                <td>
+                    <form method="POST" style="display:inline;">
+                        <button type="submit" name="remove_pack" value="{{ item.pack_id }}" style="color: red; cursor: pointer; background: none; border: none; font-size: 1.2em;">❌</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            <tr style="background: #e9ecef; font-size: 1.2em; font-weight: bold;">
+                <td colspan="3" style="text-align: right;">TOTAL:</td>
+                <td style="color: #2e7d32;">${{ "%.2f"|format(grand_total) }}</td>
+                <td></td>
+            </tr>
+        </table>
+
+        <div style="margin-top: 20px; display: flex; gap: 15px; justify-content: flex-end;">
+            <form method="POST">
+                <button type="submit" name="clear_cart" value="1" class="btn" style="background-color: #dc3545; color: white; padding: 10px 20px; font-size: 1em;" onsubmit="return confirm('Clear entire cart?');">Clear Cart</button>
+            </form>
+            <form action="/process_cart" method="POST">
+                <button type="submit" class="btn" style="background-color: #28a745; color: white; text-align: center; font-size: 1em; padding: 10px 20px; border: none; cursor: pointer;">Finish & Complete Sale (${{ "%.2f"|format(grand_total) }}) →</button>
+            </form>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 
     <script>
         wireCamera('sellCamBtn', 'sellReader', 'scanBarcode', 'scanForm');
@@ -168,17 +169,81 @@
 
         function ensureBarcodeFocus() {
             var el = document.getElementById('scanBarcode');
-            if (el) {
-                el.focus();
-                try { el.select(); } catch(e) {}
+            if (el && document.activeElement !== el) {
+                var tag = document.activeElement ? document.activeElement.tagName : '';
+                if (tag !== 'BUTTON' && tag !== 'A' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+                    el.focus();
+                    try { el.select(); } catch(e) {}
+                }
             }
         }
 
+        // 1. Initial focus on DOM load, page show, and window load
         window.addEventListener('DOMContentLoaded', ensureBarcodeFocus);
         window.addEventListener('load', ensureBarcodeFocus);
         window.addEventListener('pageshow', ensureBarcodeFocus);
         setTimeout(ensureBarcodeFocus, 50);
         setTimeout(ensureBarcodeFocus, 250);
+
+        // 2. Background click handler: clicking anywhere on blank space refocuses scanBarcode
+        document.addEventListener('click', function(e) {
+            var tag = e.target ? e.target.tagName : '';
+            if (tag !== 'BUTTON' && tag !== 'A' && tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+                ensureBarcodeFocus();
+            }
+        });
+
+        // 3. Keep-alive focus loop: check every 300ms to ensure caret is active
+        setInterval(ensureBarcodeFocus, 300);
+
+        // 4. Zero-reload AJAX scan handler (prevents page reload & keeps focus 100% active)
+        function attachAjaxScan() {
+            var scanForm = document.getElementById('scanForm');
+            if (scanForm && !scanForm.dataset.ajaxAttached) {
+                scanForm.dataset.ajaxAttached = "true";
+                scanForm.addEventListener('submit', function(e) {
+                    var input = document.getElementById('scanBarcode');
+                    var val = (input ? input.value : '').trim();
+                    
+                    e.preventDefault();
+                    if (!val) {
+                        ensureBarcodeFocus();
+                        return;
+                    }
+
+                    var formData = new FormData(scanForm);
+                    fetch('/sell_lottery', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(function(res) { return res.text(); })
+                    .then(function(html) {
+                        var parser = new DOMParser();
+                        var newDoc = parser.parseFromString(html, 'text/html');
+                        var newCart = newDoc.getElementById('cartSection');
+                        var curCart = document.getElementById('cartSection');
+                        
+                        if (curCart && newCart) {
+                            curCart.innerHTML = newCart.innerHTML;
+                        }
+                        
+                        // Re-wire camera & focus input immediately
+                        wireCamera('sellCamBtn', 'sellReader', 'scanBarcode', 'scanForm');
+                        var manBtn = document.getElementById('sellManualBtn');
+                        if (manBtn) {
+                            manBtn.onclick = function() { window.openTouchNumpad('scanBarcode', 'scanForm'); };
+                        }
+                        attachAjaxScan();
+                        ensureBarcodeFocus();
+                    })
+                    .catch(function(err) {
+                        scanForm.submit();
+                    });
+                });
+            }
+        }
+
+        attachAjaxScan();
     </script>
 </body>
 </html>

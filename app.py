@@ -640,7 +640,27 @@ def sell_lottery():
                 msg = f"Bulk range #{min(entry['scans']):03d}–#{max(entry['scans']):03d} captured."
 
         if is_ajax:
-            return jsonify({'success': True, 'message': msg, 'pack_id': pack_id, 'ticket_num': ticket_num})
+            cart_display = []
+            grand_total = 0
+            for pid, data in session.get('cart', {}).items():
+                qty = line_qty(data)
+                line_total = qty * data['price']
+                grand_total += line_total
+                cart_display.append({
+                    'pack_id': pid, 'game_name': data['game_name'],
+                    'game_number': data.get('game_number') or pid.split('-')[0],
+                    'qty': qty, 'price': data['price'], 'line_total': line_total,
+                    'scans_str': ', '.join(f"#{s:03d}" for s in data['scans']),
+                    'mode': data.get('mode', 'single'),
+                })
+            return jsonify({
+                'success': True,
+                'message': msg,
+                'pack_id': pack_id,
+                'ticket_num': ticket_num,
+                'cart_display': cart_display,
+                'grand_total': f"{grand_total:.2f}"
+            })
 
         flash(msg, "success" if mode != 'bulk' or len(entry['scans']) > 1 else "info")
         return redirect(url_for('sell_lottery'))
