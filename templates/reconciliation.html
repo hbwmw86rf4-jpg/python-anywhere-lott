@@ -114,7 +114,8 @@
                     <th>Game Name</th>
                     <th class="text-right">Price</th>
                     <th>Pack ID</th>
-                    <th class="text-center">Current Ticket</th>
+                    <th class="text-center">Beg Ticket #</th>
+                    <th class="text-center">End Ticket #</th>
                     <th class="text-right">Tickets Sold</th>
                     <th class="text-right">Revenue</th>
                 </tr>
@@ -122,18 +123,31 @@
             <tbody>
                 {% for item in items %}
                 <tr>
-                    <td><span class="slot-badge">Slot #{{ item.slot_label or item.slot_number }}</span></td>
+                    <td>
+                        {% if item.has_pack %}
+                        <span class="slot-badge">Slot #{{ item.slot_label or item.slot_number }}</span>
+                        {% else %}
+                        <span style="color: #999;">—</span>
+                        {% endif %}
+                    </td>
                     <td><strong>#{{ item.game_number }}</strong></td>
                     <td>{{ item.name }}</td>
                     <td class="text-right price-tag">${{ "%.2f"|format(item.price) }}</td>
-                    <td><code style="background: #e9ecef; padding: 2px 6px; border-radius: 4px;">{{ item.pack_id }}</code></td>
-                    <td class="text-center">#{{ "%03d"|format(item.current_ticket) }}</td>
+                    <td>
+                        {% if item.has_pack %}
+                        <code style="background: #e9ecef; padding: 2px 6px; border-radius: 4px;">{{ item.pack_id }}</code>
+                        {% else %}
+                        <span style="color: #999; font-style: italic;">No Active Pack</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center"><strong>{{ item.beg_ticket_str }}</strong></td>
+                    <td class="text-center"><strong>{{ item.end_ticket_str }}</strong></td>
                     <td class="text-right"><strong>{{ item.tickets_sold }}</strong></td>
-                    <td class="text-right" style="color: #2e7d32; font-weight: bold;">${{ "%.2f"|format(item.revenue) }}</td>
+                    <td class="text-right" style="color: {% if item.revenue > 0 %}#2e7d32{% else %}#888{% endif %}; font-weight: bold;">${{ "%.2f"|format(item.revenue) }}</td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="text-center" style="padding: 20px; color: #888;">No active dispenser packs found.</td>
+                    <td colspan="9" class="text-center" style="padding: 20px; color: #888;">No games found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

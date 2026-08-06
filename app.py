@@ -1201,7 +1201,7 @@ def wipe_test_data():
 @app.route('/export_shift')
 def export_shift():
     """Shift sales report grouped by cashier with per-line detail, per-cashier
-    subtotals, and a grand total."""
+    subtotals, a grand total, and a complete Game Sales Summary showing Beginning & Ending ticket numbers for ALL games."""
     conn = get_db_connection()
     audits = conn.execute('''
         SELECT a.timestamp, a.pack_id, a.tickets_sold, a.cash_expected,
@@ -1213,24 +1213,66 @@ def export_shift():
     ''').fetchall()
     conn.close()
 
+    # Fetch complete shift reconciliation data (includes ALL games and Beg/End ticket numbers)
+    rec_data = get_shift_reconciliation_data(sort_by='slot')
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Cashier Shift Sales Report", align='C')
+    pdf.cell(0, 10, "Cashier Shift Sales & Inventory Report", align='C')
     pdf.ln(10)
     pdf.set_font("Arial", '', 9)
     pdf.cell(0, 6, f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", align='C')
-    pdf.ln(6)
-    pdf.ln(3)
+    pdf.ln(8)
+
+    # 1. Complete Game Inventory & Ticket Range Summary Table (ALL GAMES)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, "All Games Ticket Range & Sales Summary")
+    pdf.ln(8)
+
+    pdf.set_font("Arial", 'B', 8)
+    pdf.set_fill_color(220, 220, 220)
+    pdf.cell(15, 7, 'Slot #', border=1, fill=True)
+    pdf.cell(18, 7, 'Game #', border=1, fill=True)
+    pdf.cell(50, 7, 'Game Name', border=1, fill=True)
+    pdf.cell(18, 7, 'Price', border=1, fill=True, align='R')
+    pdf.cell(32, 7, 'Pack ID', border=1, fill=True)
+    pdf.cell(18, 7, 'Beg #', border=1, fill=True, align='C')
+    pdf.cell(18, 7, 'End #', border=1, fill=True, align='C')
+    pdf.cell(12, 7, 'Sold', border=1, fill=True, align='R')
+    pdf.cell(19, 7, 'Revenue', border=1, fill=True, align='R')
+    pdf.ln()
+
+    pdf.set_font("Arial", '', 8)
+    for item in rec_data['items']:
+        slot_str = str(item['slot_label'] or item['slot_number'] or '—') if item['has_pack'] else '—'
+        pdf.cell(15, 6, slot_str, border=1)
+        pdf.cell(18, 6, str(item['game_number']), border=1)
+        pdf.cell(50, 6, str(item['name'])[:26], border=1)
+        pdf.cell(18, 6, f"${item['price']:.2f}", border=1, align='R')
+        pdf.cell(32, 6, str(item['pack_id'])[:18], border=1)
+        pdf.cell(18, 6, str(item['beg_ticket_str']), border=1, align='C')
+        pdf.cell(18, 6, str(item['end_ticket_str']), border=1, align='C')
+        pdf.cell(12, 6, str(item['tickets_sold']), border=1, align='R')
+        pdf.cell(19, 6, f"${item['revenue']:.2f}", border=1, align='R')
+        pdf.ln()
+
+    pdf.ln(8)
+
+    # 2. Detailed Cashier Audit Breakdown
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, "Cashier Transaction Details")
+    pdf.ln(8)
 
     def header_row():
-        pdf.set_font("Arial", 'B', 9)
-        pdf.cell(40, 8, 'Time', border=1)
-        pdf.cell(30, 8, 'Pack', border=1)
-        pdf.cell(55, 8, 'Game', border=1)
-        pdf.cell(20, 8, 'Method', border=1, align='C')
-        pdf.cell(20, 8, 'Tkts', border=1, align='C')
-        pdf.cell(25, 8, 'Amount', border=1, align='R')
+        pdf.set_font("Arial", 'B', 8)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.cell(35, 7, 'Time', border=1, fill=True)
+        pdf.cell(30, 7, 'Pack', border=1, fill=True)
+        pdf.cell(55, 7, 'Game', border=1, fill=True)
+        pdf.cell(20, 7, 'Method', border=1, fill=True, align='C')
+        pdf.cell(20, 7, 'Tkts', border=1, fill=True, align='C')
+        pdf.cell(30, 7, 'Amount', border=1, fill=True, align='R')
         pdf.ln()
 
     grand_total = 0
@@ -1240,11 +1282,11 @@ def export_shift():
     cashier_tickets = 0
 
     def cashier_subtotal():
-        pdf.set_font("Arial", 'B', 9)
-        pdf.cell(145, 8, f"Subtotal for {current_name}", border=1, align='R')
-        pdf.cell(20, 8, str(cashier_tickets), border=1, align='C')
-        pdf.cell(25, 8, f"${cashier_total:.2f}", border=1, align='R')
-        pdf.ln(10)
+        pdf.set_font("Arial", 'B', 8)
+        pdf.cell(140, 7, f"Subtotal for {current_name}", border=1, align='R')
+        pdf.cell(20, 7, str(cashier_tickets), border=1, align='C')
+        pdf.cell(30, 7, f"${cashier_total:.2f}", border=1, align='R')
+        pdf.ln(8)
 
     for a in audits:
         name = a['cashier_name'] if a['cashier_name'] else 'Unassigned'
@@ -1254,18 +1296,18 @@ def export_shift():
             current_name = name
             cashier_total = 0
             cashier_tickets = 0
-            pdf.set_font("Arial", 'B', 11)
-            pdf.cell(0, 8, f"Cashier: {current_name}")
-            pdf.ln(8)
+            pdf.set_font("Arial", 'B', 10)
+            pdf.cell(0, 7, f"Cashier: {current_name}")
+            pdf.ln(7)
             header_row()
 
-        pdf.set_font("Arial", '', 9)
-        pdf.cell(40, 8, str(a['timestamp']), border=1)
-        pdf.cell(30, 8, str(a['pack_id']), border=1)
-        pdf.cell(55, 8, str(a['game_name'])[:30], border=1)
-        pdf.cell(20, 8, str(a['method'] or '')[:8], border=1, align='C')
-        pdf.cell(20, 8, str(a['tickets_sold']), border=1, align='C')
-        pdf.cell(25, 8, f"${a['cash_expected']:.2f}", border=1, align='R')
+        pdf.set_font("Arial", '', 8)
+        pdf.cell(35, 6, str(a['timestamp'])[:19], border=1)
+        pdf.cell(30, 6, str(a['pack_id'])[:16], border=1)
+        pdf.cell(55, 6, str(a['game_name'])[:28], border=1)
+        pdf.cell(20, 6, str(a['method'] or '')[:8], border=1, align='C')
+        pdf.cell(20, 6, str(a['tickets_sold']), border=1, align='C')
+        pdf.cell(30, 6, f"${a['cash_expected']:.2f}", border=1, align='R')
         pdf.ln()
 
         cashier_total += a['cash_expected'] or 0
@@ -1276,10 +1318,10 @@ def export_shift():
     if current_name is not None:
         cashier_subtotal()
 
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(145, 10, "GRAND TOTAL", border=1, align='R')
-    pdf.cell(20, 10, str(grand_tickets), border=1, align='C')
-    pdf.cell(25, 10, f"${grand_total:.2f}", border=1, align='R')
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(140, 8, "GRAND TOTAL", border=1, align='R')
+    pdf.cell(20, 8, str(grand_tickets), border=1, align='C')
+    pdf.cell(30, 8, f"${grand_total:.2f}", border=1, align='R')
     pdf.ln()
 
     return Response(pdf_to_bytes(pdf), mimetype="application/pdf",
@@ -1400,49 +1442,100 @@ def pdf_to_bytes(pdf):
 
 
 def get_shift_reconciliation_data(sort_by='slot'):
-    """Fetch active dispenser packs, calculate tickets sold and cash expected,
-    and sort according to cashier/manager preference."""
+    """Fetch all games, calculate starting/ending ticket numbers, tickets sold,
+    and revenue. Includes ALL games (even those with 0 sales or no active pack)."""
     conn = get_db_connection()
+
+    # 1. Fetch all registered games
+    all_games = conn.execute('SELECT * FROM games ORDER BY price ASC, game_number ASC').fetchall()
+
+    # 2. Fetch active dispenser packs
     packs_data = conn.execute('''
         SELECT p.pack_id, p.game_number, p.status, p.slot_number, p.slot_label, p.current_ticket,
-               COALESCE(g.name, 'Unknown Game') AS name,
-               COALESCE(g.price, 0.0) AS price,
-               COALESCE(g.tickets_per_pack, 0) AS tickets_per_pack
+               g.name, g.price, g.tickets_per_pack
         FROM packs p
-        LEFT JOIN games g ON p.game_number = g.game_number
-        WHERE p.status IN ('ACTIVE', 'SOLD_OUT')
+        JOIN games g ON p.game_number = g.game_number
+        WHERE p.status IN ('DISPENSER', 'ACTIVE', 'SOLD_OUT')
     ''').fetchall()
+
+    # 3. Fetch audit sales summary grouped by pack_id
+    audit_sales = conn.execute('''
+        SELECT pack_id, SUM(tickets_sold) AS total_sold, SUM(cash_expected) AS total_cash
+        FROM audits
+        GROUP BY pack_id
+    ''').fetchall()
+    audit_map = {row['pack_id']: row for row in audit_sales}
+
     conn.close()
 
     items = []
     total_tickets_sold = 0
     total_revenue = 0.0
+    games_with_packs = set()
 
     for row in packs_data:
         p = dict(row)
-        curr_t = p['current_ticket'] or 0
+        game_num = p['game_number']
+        games_with_packs.add(game_num)
+
+        curr_t = p['current_ticket'] if p['current_ticket'] is not None else 0
         price = p['price'] or 0.0
+        tpp = p['tickets_per_pack'] or 0
+        default_start = (tpp - 1) if tpp > 0 else 0
 
-        sold = curr_t
-        revenue = sold * price
+        # Calculate sold and revenue from audits or shift delta
+        pack_audit = audit_map.get(p['pack_id'])
+        if pack_audit and pack_audit['total_sold'] is not None:
+            sold = int(pack_audit['total_sold'])
+            revenue = float(pack_audit['total_cash']) if pack_audit['total_cash'] is not None else sold * price
+            beg_ticket = min(default_start, curr_t + sold)
+        else:
+            sold = max(0, default_start - curr_t) if p['status'] == 'DISPENSER' and default_start > curr_t else 0
+            revenue = sold * price
+            beg_ticket = (curr_t + sold) if sold > 0 else curr_t
 
+        end_ticket = curr_t
+
+        p['beg_ticket_str'] = f"#{beg_ticket:03d}" if beg_ticket >= 0 else "—"
+        p['end_ticket_str'] = f"#{end_ticket:03d}" if end_ticket >= 0 else "—"
         p['tickets_sold'] = sold
         p['revenue'] = revenue
-        items.append(p)
+        p['has_pack'] = True
 
+        items.append(p)
         total_tickets_sold += sold
         total_revenue += revenue
 
+    # 4. Include ALL games that have NO active dispenser packs (0 sales)
+    for g in all_games:
+        g_num = g['game_number']
+        if g_num not in games_with_packs:
+            tpp = g['tickets_per_pack'] or 0
+            items.append({
+                'pack_id': 'No Active Pack',
+                'game_number': g_num,
+                'status': 'NO_PACK',
+                'slot_number': 9999,
+                'slot_label': '—',
+                'current_ticket': 0,
+                'name': g['name'],
+                'price': g['price'] or 0.0,
+                'tickets_per_pack': tpp,
+                'beg_ticket_str': '—',
+                'end_ticket_str': '—',
+                'tickets_sold': 0,
+                'revenue': 0.0,
+                'has_pack': False
+            })
+
     # Sorting options
     if sort_by == 'price':
-        # Sort by Ticket Price descending, then slot number
-        items.sort(key=lambda x: (-x['price'], x['slot_number'] or 0, str(x['slot_label'] or '')))
+        items.sort(key=lambda x: (-x['price'], x['slot_number'] or 9999, str(x['game_number'])))
     elif sort_by == 'sales_rank':
-        # Sort by Sales/Revenue descending, then tickets sold descending
-        items.sort(key=lambda x: (-x['revenue'], -x['tickets_sold'], x['slot_number'] or 0))
+        items.sort(key=lambda x: (-x['revenue'], -x['tickets_sold'], x['slot_number'] or 9999, str(x['game_number'])))
     else:
         # Default: Sort by Dispenser Slot Number ascending
-        items.sort(key=lambda x: (x['slot_number'] or 0, str(x['slot_label'] or '')))
+        items.sort(key=lambda x: (x['slot_number'] or 9999, str(x['slot_label'] or '9999'), str(x['game_number'])))
 
     # Denomination Summary grouping
     denom_summary = {}
@@ -1462,7 +1555,8 @@ def get_shift_reconciliation_data(sort_by='slot'):
         'denom_summary': denom_list,
         'total_tickets_sold': total_tickets_sold,
         'total_revenue': total_revenue,
-        'pack_count': len(items),
+        'pack_count': len([i for i in items if i['has_pack']]),
+        'total_games_count': len(items),
         'sort_by': sort_by,
         'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     }
@@ -1502,35 +1596,47 @@ def shift_reconciliation_pdf():
     pdf.set_fill_color(240, 244, 248)
     pdf.cell(90, 8, f" Total Revenue: ${data['total_revenue']:.2f}", border=1, fill=True)
     pdf.cell(90, 8, f" Total Tickets Sold: {data['total_tickets_sold']}", border=1, fill=True)
-    pdf.cell(97, 8, f" Active Dispenser Slots: {data['pack_count']}", border=1, fill=True)
+    pdf.cell(97, 8, f" Active Dispenser Slots: {data['pack_count']} ({data['total_games_count']} Total Games)", border=1, fill=True)
     pdf.ln(12)
 
     # Table Header
     pdf.set_font("Arial", 'B', 9)
     pdf.set_fill_color(220, 220, 220)
     pdf.cell(20, 8, 'Slot #', border=1, fill=True)
-    pdf.cell(25, 8, 'Game #', border=1, fill=True)
-    pdf.cell(75, 8, 'Game Name', border=1, fill=True)
-    pdf.cell(25, 8, 'Price ($)', border=1, fill=True, align='R')
-    pdf.cell(45, 8, 'Pack ID', border=1, fill=True)
-    pdf.cell(30, 8, 'Curr Ticket', border=1, fill=True, align='C')
-    pdf.cell(27, 8, 'Sold', border=1, fill=True, align='R')
-    pdf.cell(30, 8, 'Revenue ($)', border=1, fill=True, align='R')
+    pdf.cell(22, 8, 'Game #', border=1, fill=True)
+    pdf.cell(65, 8, 'Game Name', border=1, fill=True)
+    pdf.cell(22, 8, 'Price ($)', border=1, fill=True, align='R')
+    pdf.cell(42, 8, 'Pack ID', border=1, fill=True)
+    pdf.cell(22, 8, 'Beg #', border=1, fill=True, align='C')
+    pdf.cell(22, 8, 'End #', border=1, fill=True, align='C')
+    pdf.cell(22, 8, 'Sold', border=1, fill=True, align='R')
+    pdf.cell(28, 8, 'Revenue ($)', border=1, fill=True, align='R')
     pdf.ln()
 
     # Table Rows
     pdf.set_font("Arial", '', 9)
     for item in data['items']:
-        slot_str = str(item['slot_label'] or item['slot_number'] or '')
+        slot_str = str(item['slot_label'] or item['slot_number'] or '—') if item['has_pack'] else '—'
         pdf.cell(20, 7, slot_str, border=1)
-        pdf.cell(25, 7, str(item['game_number']), border=1)
-        pdf.cell(75, 7, str(item['name'])[:35], border=1)
-        pdf.cell(25, 7, f"${item['price']:.2f}", border=1, align='R')
-        pdf.cell(45, 7, str(item['pack_id']), border=1)
-        pdf.cell(30, 7, f"#{item['current_ticket']:03d}", border=1, align='C')
-        pdf.cell(27, 7, str(item['tickets_sold']), border=1, align='R')
-        pdf.cell(30, 7, f"${item['revenue']:.2f}", border=1, align='R')
+        pdf.cell(22, 7, str(item['game_number']), border=1)
+        pdf.cell(65, 7, str(item['name'])[:30], border=1)
+        pdf.cell(22, 7, f"${item['price']:.2f}", border=1, align='R')
+        pdf.cell(42, 7, str(item['pack_id'])[:22], border=1)
+        pdf.cell(22, 7, str(item['beg_ticket_str']), border=1, align='C')
+        pdf.cell(22, 7, str(item['end_ticket_str']), border=1, align='C')
+        pdf.cell(22, 7, str(item['tickets_sold']), border=1, align='R')
+        pdf.cell(28, 7, f"${item['revenue']:.2f}", border=1, align='R')
         pdf.ln()
+
+    # Digital Verification Badge
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 8, f"Digital Audit Record - Logged by {session.get('cashier_name', 'Staff')} on {data['timestamp']}", align='C')
+    pdf.ln(8)
+
+    filename = f"Shift_Reconciliation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return Response(pdf_to_bytes(pdf), mimetype="application/pdf",
+                    headers={"Content-disposition": f"attachment; filename={filename}"})
 
     # Digital Verification Badge
     pdf.ln(10)
