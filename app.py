@@ -858,29 +858,8 @@ def receive_scan():
     game_num, pack_id, _ = parsed
 
     conn = get_db_connection()
-    pack = conn.execute('SELECT * FROM packs WHERE pack_id = ?', (pack_id,)).fetchone()
-
-    if pack:
-        # Re-scanning a soft-deleted pack restores it — the "re-scan to fix" flow.
-        if pack['status'] == 'DELETED':
-            restored_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            conn.execute('UPDATE packs SET status = "BACKROOM", deleted_at = NULL, received_at = ? WHERE pack_id = ?', (restored_at, pack_id))
-            conn.commit()
-            conn.close()
-            log_change(current_actor(), 'CORRECTION', 'RESTORE_PACK', pack_id,
-                       old_value='DELETED', new_value='BACKROOM',
-                       details='re-scanned; restored to backroom')
-            flash(f"Pack {pack_id} was previously deleted — restored to Backroom Stock.", "success")
-            return redirect(url_for('games_management'))
-        conn.close()
-        flash(f"NOTICE: Pack {pack_id} is already in the system.", "warning")
-        return redirect(url_for('games_management'))
-
     game = conn.execute('SELECT tickets_per_pack FROM games WHERE game_number = ?', (game_num,)).fetchone()
     if not game:
-        # Don't invent a placeholder game/price. Make the manager set it up first
-        # so the name and denomination are real. The game number is pre-filled
-        # into the "Add a New Game" form below.
         conn.close()
         session['prefill_game'] = game_num
         flash(f"Game #{game_num} is not set up yet. Enter its name and price under "
@@ -889,6 +868,32 @@ def receive_scan():
 
     starting_ticket = game['tickets_per_pack'] - 1
     received_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    pack = conn.execute('SELECT * FROM packs WHERE pack_id = ?', (pack_id,)).fetchone()
+
+    if pack:
+        if pack['status'] == 'BACKROOM':
+            conn.close()
+            flash(f"NOTICE: Pack {pack_id} is already sitting in Backroom Stock.", "info")
+            return redirect(url_for('games_management'))
+
+        # Pack is currently DISPENSER, SOLD_OUT, DELETED, or RETURNED/RETURN_PENDING.
+        # Move it back to BACKROOM stock with a fresh starting ticket count so it can be activated.
+        conn.execute('''
+            UPDATE packs 
+            SET status = "BACKROOM", slot_number = NULL, slot_label = NULL,
+                current_ticket = ?, deleted_at = NULL, received_at = ?
+            WHERE pack_id = ?
+        ''', (starting_ticket, received_at, pack_id))
+        conn.commit()
+        conn.close()
+
+        log_change(current_actor(), 'INVENTORY', 'RECEIVE_PACK', pack_id,
+                   old_value=pack['status'], new_value='BACKROOM',
+                   details=f"re-scanned at receive stock; moved to backroom stock with start ticket #{starting_ticket:03d}")
+        flash(f"Pack {pack_id} (previously {pack['status']}) has been moved to Backroom Stock! You can now activate it.", "success")
+        return redirect(url_for('games_management'))
+
     conn.execute('INSERT INTO packs (pack_id, game_number, status, slot_number, current_ticket, received_at) VALUES (?, ?, "BACKROOM", NULL, ?, ?)',
                  (pack_id, game_num, starting_ticket, received_at))
     conn.commit()
