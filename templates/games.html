@@ -314,15 +314,23 @@
 <script>
     wireCamera('receiveCamBtn', 'receiveReader', 'receive_barcode', 'receiveForm');
 
-    // Keep the caret ready for rapid scanning.
-    window.addEventListener('load', function () {
+    function focusReceiveInput() {
         {% if prefill_game %}
         var el = document.getElementById('new_game_name');
         {% else %}
         var el = document.getElementById('receive_barcode');
         {% endif %}
-        if (el) { el.focus(); }
-    });
+        if (el) {
+            el.focus();
+            try { el.select(); } catch(e) {}
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', focusReceiveInput);
+    window.addEventListener('load', focusReceiveInput);
+    window.addEventListener('pageshow', focusReceiveInput);
+    setTimeout(focusReceiveInput, 50);
+    setTimeout(focusReceiveInput, 250);
 </script>
 </body>
 </html>

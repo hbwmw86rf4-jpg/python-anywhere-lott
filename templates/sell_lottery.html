@@ -165,6 +165,20 @@
         document.getElementById('sellManualBtn').onclick = function() {
             window.openTouchNumpad('scanBarcode', 'scanForm');
         };
+
+        function ensureBarcodeFocus() {
+            var el = document.getElementById('scanBarcode');
+            if (el) {
+                el.focus();
+                try { el.select(); } catch(e) {}
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', ensureBarcodeFocus);
+        window.addEventListener('load', ensureBarcodeFocus);
+        window.addEventListener('pageshow', ensureBarcodeFocus);
+        setTimeout(ensureBarcodeFocus, 50);
+        setTimeout(ensureBarcodeFocus, 250);
     </script>
 </body>
 </html>
