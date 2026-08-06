@@ -28,9 +28,9 @@ APP_PASSCODE = os.environ.get('LOTTERY_PASSCODE', '1111')
 MANAGER_PIN = os.environ.get('LOTTERY_MANAGER_PIN', '1234')
 WIPE_PASSWORD = os.environ.get('LOTTERY_WIPE_PASSWORD', 'SuperSecret123!')
 
-# A real scratch-ticket barcode tops out around 16 digits; anything much longer
-# is almost certainly a scanner double-fire concatenating two reads.
-MAX_BARCODE_LEN = 24
+# A real scratch-ticket barcode tops out around 24-30 digits; anything longer
+# than 32 digits is almost certainly a scanner double-fire concatenating two reads.
+MAX_BARCODE_LEN = 32
 # How long a soft-deleted backroom pack stays visible (struck-through) so any
 # funny business remains obvious.
 DELETED_PACK_VISIBLE_WEEKS = 6
@@ -133,32 +133,79 @@ def current_actor():
 
 def parse_ticket_barcode(raw):
     """Parse a scanned lottery barcode into (game_num, pack_id, ticket_num).
-    Returns None if the barcode is too short to be valid."""
+    Supports 13, 14, 15, 16, 22, 24, 30+ digit barcodes (1D and 2D formats).
+    Correctly parses 4-digit game numbers, 7-digit pack numbers, and handles UPC leading zeros."""
     raw = (raw or '').strip()
-    # IL Lottery scratch ticket barcodes are exactly 14 digits (ITF-14).
-    # Enforcing strict length prevents partial or upside-down inverted reads 
-    # from being parsed as valid barcodes.
-    if len(raw) != 14 or not raw.isdigit():
+
+    # 1. Strip AIM symbology identifier prefixes (e.g. ]C1, ]e0, ]p0)
+    if raw.startswith(']'):
+        raw = raw[3:]
+
+    # 2. Strip any remaining non-digit characters (spaces, dashes, etc.)
+    digits = re.sub(r'\D', '', raw)
+
+    if len(digits) < 11 or len(digits) > 32:
         return None
 
-    clean_barcode = raw[:-2]
-    ticket_num = int(clean_barcode[-3:])
-    game_pack_str = clean_barcode[:-3]
+    def make_tuple(g, p, t):
+        return str(g), f"{g}-{p}", int(t)
 
-    # For longer barcodes (24+ digits), the game_pack_str contains
-    # additional data (validation, security) that we do not need.
-    # The game+pack portion is always at the beginning.
-    if len(game_pack_str) > 11:
-        game_pack_str = game_pack_str[:9]
+    # 3. Query existing games and packs from SQLite database for exact matching
+    try:
+        conn = get_db_connection()
+        games = set(r['game_number'] for r in conn.execute('SELECT game_number FROM games').fetchall())
+        packs = set(r['pack_id'] for r in conn.execute('SELECT pack_id FROM packs').fetchall())
+        conn.close()
+    except Exception:
+        games = set()
+        packs = set()
 
-    if len(game_pack_str) == 9:
-        game_num = game_pack_str[:3]
-    else:
-        game_num = game_pack_str[:4]
+    # 4. Handle UPC / EAN leading zero (e.g. 076480032244015 -> 76480032244015)
+    candidate_digits = [digits]
+    if len(digits) in (13, 15, 16, 25) and digits.startswith('0'):
+        candidate_digits.insert(0, digits[1:])
 
-    pack_num = game_pack_str[len(game_num):]
-    pack_id = f"{game_num}-{pack_num}"
-    return game_num, pack_id, ticket_num
+    for d in candidate_digits:
+        # A. Primary Illinois standard: 4-digit Game + 7-digit Pack + 3-digit Ticket (14+ digits)
+        if len(d) >= 14:
+            g4 = d[:4]
+            p7 = d[4:11]
+            t3 = d[11:14]
+            pack_id4 = f"{g4}-{p7}"
+
+            if pack_id4 in packs or g4 in games:
+                return make_tuple(g4, p7, t3)
+
+        # B. Check 3-digit Game + 6-digit Pack ONLY IF exact pack_id is in database
+        if len(d) >= 12:
+            g3 = d[:3]
+            p6 = d[3:9]
+            t3_g3 = d[9:12]
+            pack_id3 = f"{g3}-{p6}"
+            if pack_id3 in packs:
+                return make_tuple(g3, p6, t3_g3)
+
+        # C. Fallback for 14+ digits: Always parse as 4-digit Game + 7-digit Pack + 3-digit Ticket
+        if len(d) >= 14:
+            return make_tuple(d[:4], d[4:11], d[11:14])
+
+        # D. Fallback for 13 digits (4-digit Game + 6-digit Pack + 3-digit Ticket)
+        if len(d) == 13:
+            g4 = d[:4]
+            p6 = d[4:10]
+            t3 = d[10:13]
+            if f"{g4}-{p6}" in packs or g4 in games:
+                return make_tuple(g4, p6, t3)
+            return make_tuple(d[:4], d[4:10], d[10:13])
+
+        # E. Fallback for 11-12 digits: 4-digit Game + 5/6 digit Pack + 2/3 digit Ticket
+        if len(d) in (11, 12):
+            g4 = d[:4]
+            t = d[-3:]
+            p = d[4:-3]
+            return make_tuple(g4, p, t)
+
+    return make_tuple(digits[:4], digits[4:11], digits[11:14])
 
 
 def validate_reading(ticket_num, current_ticket):

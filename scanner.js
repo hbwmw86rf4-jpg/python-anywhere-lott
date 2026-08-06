@@ -19,8 +19,53 @@
 (function () {
     'use strict';
 
+    // Automatic Scroll & Focus Position Preservation across reloads and form submits
+    (function () {
+        try {
+            var savedY = sessionStorage.getItem('lott_saved_scroll_y');
+            var savedFocusId = sessionStorage.getItem('lott_saved_focus_id');
+            
+            if (savedY !== null && savedY !== undefined) {
+                var targetY = parseInt(savedY, 10);
+                sessionStorage.removeItem('lott_saved_scroll_y');
+                sessionStorage.removeItem('lott_saved_focus_id');
+                if (!isNaN(targetY) && targetY > 0) {
+                    var restore = function () {
+                        window.scrollTo(0, targetY);
+                        if (savedFocusId) {
+                            var focusEl = document.getElementById(savedFocusId);
+                            if (focusEl) {
+                                try { focusEl.focus(); } catch (e) {}
+                            }
+                        }
+                    };
+                    if (document.readyState === 'complete') {
+                        restore();
+                    } else {
+                        window.addEventListener('load', restore);
+                        setTimeout(restore, 50);
+                    }
+                }
+            }
+
+            var savePos = function () {
+                try {
+                    sessionStorage.setItem('lott_saved_scroll_y', window.scrollY || window.pageYOffset || 0);
+                    if (document.activeElement && document.activeElement.id) {
+                        sessionStorage.setItem('lott_saved_focus_id', document.activeElement.id);
+                    }
+                } catch (e) {}
+            };
+
+            window.addEventListener('beforeunload', savePos);
+            document.addEventListener('submit', savePos, true);
+        } catch (e) {}
+    })();
+
     // Duplicate-scan guard: ignore the exact same barcode fired within 1.5 seconds.
     var lastScan = { code: null, ts: 0 };
+
+    var sharedAudioCtx = null;
 
     /**
      * Synthesize a short, crisp audio scan beep using Web Audio API.
@@ -29,20 +74,65 @@
         try {
             var AudioContextClass = window.AudioContext || window.webkitAudioContext;
             if (!AudioContextClass) return;
-            var ctx = new AudioContextClass();
+            if (!sharedAudioCtx) {
+                sharedAudioCtx = new AudioContextClass();
+            }
+            if (sharedAudioCtx.state === 'suspended') {
+                sharedAudioCtx.resume();
+            }
+            var ctx = sharedAudioCtx;
             var osc = ctx.createOscillator();
             var gain = ctx.createGain();
             osc.type = 'sine';
             osc.frequency.setValueAtTime(880, ctx.currentTime);
-            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
             osc.connect(gain);
             gain.connect(ctx.destination);
             osc.start();
             osc.stop(ctx.currentTime + 0.12);
-            setTimeout(function () { ctx.close(); }, 200);
         } catch (e) {
             /* ignore audio restriction if user hasn't interacted */
+        }
+    }
+
+    /**
+     * Synthesize a dissonant, low-pitch error buzz using Web Audio API.
+     */
+    function playErrorBeep() {
+        try {
+            var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            if (!sharedAudioCtx) {
+                sharedAudioCtx = new AudioContextClass();
+            }
+            if (sharedAudioCtx.state === 'suspended') {
+                sharedAudioCtx.resume();
+            }
+            var ctx = sharedAudioCtx;
+            var osc = ctx.createOscillator();
+            var osc2 = ctx.createOscillator();
+            var gain = ctx.createGain();
+            
+            // Dissonant frequencies for an "error" sound
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, ctx.currentTime);
+            osc2.type = 'square';
+            osc2.frequency.setValueAtTime(160, ctx.currentTime);
+            
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            
+            osc.connect(gain);
+            osc2.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start();
+            osc2.start();
+            osc.stop(ctx.currentTime + 0.3);
+            osc2.stop(ctx.currentTime + 0.3);
+        } catch (e) {
+            /* ignore */
         }
     }
 
@@ -73,7 +163,7 @@
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
                 width: 85%; height: 50%; max-width: 320px; max-height: 160px;
-                border: 2px solid #00ff00; border-radius: 8px;
+                border: 2px solid #ffffff; border-radius: 8px;
                 box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
                 transition: border-color 0.15s ease, box-shadow 0.15s ease;
             }
@@ -81,21 +171,11 @@
                 border-color: #39ff14 !important;
                 box-shadow: 0 0 25px #39ff14, 0 0 0 9999px rgba(0, 0, 0, 0.45) !important;
             }
-            .lott-scan-corner { position: absolute; width: 18px; height: 18px; border: 3px solid #00ff00; }
+            .lott-scan-corner { position: absolute; width: 18px; height: 18px; border: 3px solid #ffffff; }
             .lott-scan-corner.tl { top: -3px; left: -3px; border-right: none; border-bottom: none; }
             .lott-scan-corner.tr { top: -3px; right: -3px; border-left: none; border-bottom: none; }
             .lott-scan-corner.bl { bottom: -3px; left: -3px; border-right: none; border-top: none; }
             .lott-scan-corner.br { bottom: -3px; right: -3px; border-left: none; border-top: none; }
-            .lott-scan-line {
-                position: absolute; top: 0; left: 0; width: 100%; height: 2px;
-                background: #00ff00; box-shadow: 0 0 8px #00ff00;
-                animation: lott-scan-anim 2s infinite ease-in-out;
-            }
-            @keyframes lott-scan-anim {
-                0% { top: 5%; opacity: 0.6; }
-                50% { top: 90%; opacity: 1; }
-                100% { top: 5%; opacity: 0.6; }
-            }
             .lott-scan-status {
                 position: absolute; bottom: 8px; left: 0; width: 100%;
                 text-align: center; color: #ffffff; font-size: 12px; font-weight: bold;
@@ -117,9 +197,321 @@
             .lott-video-preview {
                 width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 8px;
             }
+            /* Touch Numpad Modal Styles */
+            .lott-np-overlay {
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.75); z-index: 99999; display: none;
+                justify-content: center; align-items: center; padding: 12px;
+                box-sizing: border-box; overflow-y: auto;
+            }
+            .lott-np-card {
+                background: #ffffff; width: 100%; max-width: 440px; border-radius: 14px;
+                padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); box-sizing: border-box;
+                font-family: Arial, sans-serif; position: relative;
+            }
+            .lott-np-header {
+                display: flex; justify-content: space-between; align-items: center;
+                border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 12px;
+            }
+            .lott-np-header h3 { margin: 0; font-size: 1.15em; color: #111; display: flex; align-items: center; gap: 6px; }
+            .lott-np-close {
+                background: #e9ecef; border: none; font-size: 18px; font-weight: bold;
+                border-radius: 50%; width: 32px; height: 32px; cursor: pointer; color: #333;
+            }
+            .lott-ticket-guide {
+                background: #f8f9fa; border: 2px dashed #007bff; border-radius: 10px;
+                padding: 12px; margin-bottom: 12px; font-size: 12px;
+            }
+            .lott-ticket-diagram {
+                background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 8px;
+                margin-top: 6px; display: flex; flex-direction: column; gap: 6px; text-align: center;
+            }
+            .lott-badge {
+                display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: bold;
+                color: #fff; font-size: 11px; margin: 0 2px;
+            }
+            .lott-badge-game { background: #0056b3; }
+            .lott-badge-pack { background: #28a745; }
+            .lott-badge-ticket { background: #e8590c; }
+            .lott-mode-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+            .lott-tab-btn {
+                flex: 1; padding: 8px; font-weight: bold; font-size: 12px; border: 1px solid #007bff;
+                border-radius: 6px; background: #fff; color: #007bff; cursor: pointer;
+            }
+            .lott-tab-btn.active { background: #007bff; color: #fff; }
+            .lott-field-group { display: flex; gap: 6px; margin-bottom: 12px; }
+            .lott-field-box { flex: 1; display: flex; flex-direction: column; }
+            .lott-field-box label { font-size: 11px; font-weight: bold; margin-bottom: 3px; }
+            .lott-field-input {
+                width: 100%; padding: 10px 6px; font-size: 16px; font-weight: bold;
+                text-align: center; border: 2px solid #ccc; border-radius: 6px;
+                box-sizing: border-box; background: #fff; cursor: pointer;
+            }
+            .lott-field-input.active { border-color: #007bff; background: #e7f3ff; box-shadow: 0 0 5px rgba(0,123,255,0.4); }
+            .lott-np-grid {
+                display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px;
+            }
+            .lott-np-key {
+                padding: 14px 0; font-size: 22px; font-weight: bold; background: #f1f3f5;
+                border: 1px solid #ced4da; border-radius: 8px; cursor: pointer; text-align: center;
+                user-select: none; transition: background 0.1s, transform 0.05s;
+            }
+            .lott-np-key:active { background: #d0ebff; transform: scale(0.96); }
+            .lott-np-key.action { background: #e9ecef; color: #495057; font-size: 16px; }
+            .lott-np-submit {
+                width: 100%; padding: 12px; font-size: 16px; font-weight: bold; color: #fff;
+                background: #28a745; border: none; border-radius: 8px; cursor: pointer;
+            }
         `;
         document.head.appendChild(style);
     }
+
+    /**
+     * Open the Touch Numpad modal for entering ticket numbers manually.
+     */
+    function openTouchNumpad(targetInputId, targetFormId) {
+        injectStyles();
+
+        var modal = document.getElementById('lottNumpadModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'lottNumpadModal';
+            modal.className = 'lott-np-overlay';
+            modal.innerHTML = `
+                <div class="lott-np-card">
+                    <div class="lott-np-header">
+                        <h3>⌨ Manual Ticket Entry</h3>
+                        <button type="button" class="lott-np-close" id="lottNpClose">✕</button>
+                    </div>
+
+                    <!-- Visual Ticket Diagram Reference -->
+                    <div class="lott-ticket-guide">
+                        <div style="font-weight:bold; margin-bottom:4px;">💡 Where to find numbers on ticket back:</div>
+                        <div class="lott-ticket-diagram">
+                            <div>
+                                <span class="lott-badge lott-badge-game">GAME (3 or 4 digits)</span>
+                                <span class="lott-badge lott-badge-pack">PACK (5-6 digits)</span>
+                                <span class="lott-badge lott-badge-ticket">TICKET (3 digits)</span>
+                            </div>
+                            <div style="font-family: monospace; font-size: 13px; font-weight: bold; background: #eee; padding: 4px; border-radius: 4px;">
+                                <span style="color:#0056b3;">754</span> - <span style="color:#28a745;">012345</span> - <span style="color:#e8590c;">042</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mode Tabs -->
+                    <div class="lott-mode-tabs">
+                        <button type="button" class="lott-tab-btn active" id="lottTabGuided">🎯 Guided Mode</button>
+                        <button type="button" class="lott-tab-btn" id="lottTabRaw">🔢 Full Barcode</button>
+                    </div>
+
+                    <!-- Guided Fields -->
+                    <div id="lottGuidedGroup" class="lott-field-group">
+                        <div class="lott-field-box">
+                            <label style="color:#0056b3;">1. Game #</label>
+                            <input type="text" id="npGame" class="lott-field-input active" placeholder="754 / 1234" readonly>
+                        </div>
+                        <div class="lott-field-box">
+                            <label style="color:#28a745;">2. Pack #</label>
+                            <input type="text" id="npPack" class="lott-field-input" placeholder="012345" readonly>
+                        </div>
+                        <div class="lott-field-box">
+                            <label style="color:#e8590c;">3. Ticket #</label>
+                            <input type="text" id="npTicket" class="lott-field-input" placeholder="042" readonly>
+                        </div>
+                    </div>
+
+                    <!-- Raw Field -->
+                    <div id="lottRawGroup" style="display:none; margin-bottom:12px;">
+                        <label style="font-weight:bold; font-size:12px;">Full Barcode String:</label>
+                        <input type="text" id="npRaw" class="lott-field-input" placeholder="754012345042" style="text-align:left; padding-left:10px;" readonly>
+                    </div>
+
+                    <!-- Preview -->
+                    <div style="font-size:12px; color:#666; margin-bottom:10px; text-align:center;">
+                        Generated Barcode: <strong id="npPreview" style="color:#111; font-family:monospace; font-size:14px;">---</strong>
+                    </div>
+
+                    <!-- Touch Numpad Grid -->
+                    <div class="lott-np-grid">
+                        <div class="lott-np-key" data-key="1">1</div>
+                        <div class="lott-np-key" data-key="2">2</div>
+                        <div class="lott-np-key" data-key="3">3</div>
+                        <div class="lott-np-key" data-key="4">4</div>
+                        <div class="lott-np-key" data-key="5">5</div>
+                        <div class="lott-np-key" data-key="6">6</div>
+                        <div class="lott-np-key" data-key="7">7</div>
+                        <div class="lott-np-key" data-key="8">8</div>
+                        <div class="lott-np-key" data-key="9">9</div>
+                        <div class="lott-np-key action" data-key="CLEAR">C</div>
+                        <div class="lott-np-key" data-key="0">0</div>
+                        <div class="lott-np-key action" data-key="BACK">⌫</div>
+                    </div>
+
+                    <button type="button" class="lott-np-submit" id="lottNpSubmit">✅ Submit Ticket Reading</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        modal.style.display = 'flex';
+
+        var activeField = 'npGame';
+        var mode = 'guided';
+
+        var gameInp = document.getElementById('npGame');
+        var packInp = document.getElementById('npPack');
+        var ticketInp = document.getElementById('npTicket');
+        var rawInp = document.getElementById('npRaw');
+        var previewEl = document.getElementById('npPreview');
+
+        var tabGuided = document.getElementById('lottTabGuided');
+        var tabRaw = document.getElementById('lottTabRaw');
+        var guidedGroup = document.getElementById('lottGuidedGroup');
+        var rawGroup = document.getElementById('lottRawGroup');
+
+        // Reset state
+        gameInp.value = '';
+        packInp.value = '';
+        ticketInp.value = '';
+        rawInp.value = '';
+
+        function updateActiveInputHighlight() {
+            [gameInp, packInp, ticketInp, rawInp].forEach(function (el) {
+                if (el) el.classList.remove('active');
+            });
+            if (mode === 'guided') {
+                var activeEl = document.getElementById(activeField);
+                if (activeEl) activeEl.classList.add('active');
+            } else {
+                rawInp.classList.add('active');
+            }
+            updatePreview();
+        }
+
+        function updatePreview() {
+            if (mode === 'guided') {
+                var g = gameInp.value.trim();
+                var p = packInp.value.trim();
+                var t = ticketInp.value.trim();
+                if (g || p || t) {
+                    var formattedT = t ? ('000' + t).slice(-3) : '';
+                    previewEl.textContent = g + (p ? ('000000' + p).slice(-6) : '') + formattedT + (formattedT ? '00' : '');
+                } else {
+                    previewEl.textContent = '---';
+                }
+            } else {
+                previewEl.textContent = rawInp.value.trim() || '---';
+            }
+        }
+
+        // Tab click events
+        tabGuided.onclick = function () {
+            mode = 'guided';
+            tabGuided.classList.add('active');
+            tabRaw.classList.remove('active');
+            guidedGroup.style.display = 'flex';
+            rawGroup.style.display = 'none';
+            activeField = 'npGame';
+            updateActiveInputHighlight();
+        };
+
+        tabRaw.onclick = function () {
+            mode = 'raw';
+            tabRaw.classList.add('active');
+            tabGuided.classList.remove('active');
+            guidedGroup.style.display = 'none';
+            rawGroup.style.display = 'block';
+            updateActiveInputHighlight();
+        };
+
+        // Field click selection
+        gameInp.onclick = function () { activeField = 'npGame'; updateActiveInputHighlight(); };
+        packInp.onclick = function () { activeField = 'npPack'; updateActiveInputHighlight(); };
+        ticketInp.onclick = function () { activeField = 'npTicket'; updateActiveInputHighlight(); };
+
+        // Close button
+        document.getElementById('lottNpClose').onclick = function () {
+            modal.style.display = 'none';
+        };
+
+        // Instant 0ms Numpad Key Event Handling
+        var keys = modal.querySelectorAll('.lott-np-key');
+        keys.forEach(function (k) {
+            var handlePress = function (e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+
+                var val = k.getAttribute('data-key');
+                if (mode === 'guided') {
+                    var curEl = document.getElementById(activeField);
+                    if (!curEl) return;
+
+                    if (val === 'CLEAR') {
+                        curEl.value = '';
+                    } else if (val === 'BACK') {
+                        curEl.value = curEl.value.slice(0, -1);
+                    } else {
+                        // Max lengths: Game (4), Pack (6), Ticket (3)
+                        var maxLen = activeField === 'npGame' ? 4 : (activeField === 'npPack' ? 6 : 3);
+                        if (curEl.value.length < maxLen) {
+                            curEl.value += val;
+                        }
+                        // Auto-advance to next field
+                        if (curEl.value.length === maxLen) {
+                            if (activeField === 'npGame') activeField = 'npPack';
+                            else if (activeField === 'npPack') activeField = 'npTicket';
+                        }
+                    }
+                } else {
+                    if (val === 'CLEAR') {
+                        rawInp.value = '';
+                    } else if (val === 'BACK') {
+                        rawInp.value = rawInp.value.slice(0, -1);
+                    } else {
+                        if (rawInp.value.length < 24) {
+                            rawInp.value += val;
+                        }
+                    }
+                }
+                updateActiveInputHighlight();
+            };
+
+            var handled = false;
+            k.onpointerdown = function (e) {
+                handled = true;
+                handlePress(e);
+            };
+            k.onclick = function (e) {
+                if (!handled) handlePress(e);
+                handled = false;
+            };
+        });
+
+        // Submit Button
+        document.getElementById('lottNpSubmit').onclick = function () {
+            var barcodeToSend = previewEl.textContent.trim();
+            if (barcodeToSend === '---' || barcodeToSend.length < 5) {
+                alert('Please enter a valid ticket number.');
+                return;
+            }
+
+            modal.style.display = 'none';
+
+            var targetInput = document.getElementById(targetInputId);
+            if (targetInput) targetInput.value = barcodeToSend;
+
+            playScanBeep();
+            triggerHaptic();
+
+            var targetForm = document.getElementById(targetFormId);
+            if (targetForm) targetForm.submit();
+        };
+    }
+
+    window.openTouchNumpad = openTouchNumpad;
 
     /**
      * Wire up a camera-scan button.
@@ -139,6 +531,22 @@
 
         injectStyles();
 
+        // Auto-attach a Manual Entry button right beside camera scan button
+        var npBtnId = btnId + '_numpad';
+        if (!document.getElementById(npBtnId) && btn && btn.parentNode) {
+            var npBtn = document.createElement('button');
+            npBtn.type = 'button';
+            npBtn.id = npBtnId;
+            npBtn.className = btn.className || 'cam-btn';
+            npBtn.style.background = '#28a745';
+            npBtn.style.marginLeft = '8px';
+            npBtn.innerHTML = '⌨ Manual Entry';
+            npBtn.addEventListener('click', function () {
+                window.openTouchNumpad(inputId, formId);
+            });
+            btn.parentNode.insertBefore(npBtn, btn.nextSibling);
+        }
+
         var activeStream = null;
         var activeVideo = null;
         var activeDetectorLoop = null;
@@ -146,6 +554,8 @@
         var running = false;
 
         btn.dataset.originalText = btn.dataset.originalText || btn.textContent;
+
+        var isSubmitting = false;
 
         function cleanupUI() {
             reader.innerHTML = '';
@@ -181,10 +591,32 @@
         }
 
         function handleSuccessfulScan(decodedText) {
+            if (isSubmitting) return;
+
             var now = Date.now();
-            if (lastScan.code === decodedText && (now - lastScan.ts) < 1500) {
-                return; // Suppress rapid duplicate scans
+            decodedText = (decodedText || '').trim();
+
+            var statusEl = reader.querySelector('.lott-scan-status');
+
+            // Pre-validation: Allow valid lottery barcode lengths (11 to 32 digits)
+            var cleanText = decodedText.replace(/\D/g, '');
+            if (cleanText.length < 11 || cleanText.length > 32) {
+                lastScan.code = decodedText; // temporarily ignore this garbage string
+                lastScan.ts = now;
+                playErrorBeep();
+                triggerHaptic();
+                if (statusEl) {
+                    statusEl.textContent = '❌ Invalid Barcode (' + decodedText.length + ' chars)';
+                    statusEl.style.color = '#ff4d4d';
+                    setTimeout(function() {
+                        statusEl.textContent = 'Hold ticket 12-18 inches back';
+                        statusEl.style.color = '#ffffff';
+                    }, 2000);
+                }
+                return;
             }
+
+            isSubmitting = true;
             lastScan.code = decodedText;
             lastScan.ts = now;
 
@@ -195,19 +627,26 @@
             var frame = reader.querySelector('.lott-scan-frame');
             if (frame) frame.classList.add('success');
 
-            var inputEl = document.getElementById(inputId);
+            if (statusEl) {
+                statusEl.textContent = '✓ Scanned! Submitting...';
+                statusEl.style.color = '#39ff14';
+            }
+
+            var form = document.getElementById(formId);
+            var inputEl = document.getElementById(inputId) || (form ? form.querySelector('input[name="barcode"]') : null);
             if (inputEl) {
                 inputEl.value = decodedText;
             }
 
-            // Stop camera fully before submitting form to avoid camera lock / race conditions
+            // Stop camera stream & submit form cleanly
             setTimeout(function () {
                 stopCamera();
-                setTimeout(function () {
-                    var form = document.getElementById(formId);
-                    if (form) form.submit();
-                }, 120);
-            }, 250);
+                if (form) {
+                    var barInput = document.getElementById(inputId) || form.querySelector('input[name="barcode"]');
+                    if (barInput) barInput.value = decodedText;
+                    form.submit();
+                }
+            }, 300);
         }
 
         // Add visual overlay to container
@@ -220,7 +659,6 @@
                 '<div class="lott-scan-corner tr"></div>' +
                 '<div class="lott-scan-corner bl"></div>' +
                 '<div class="lott-scan-corner br"></div>' +
-                '<div class="lott-scan-line"></div>' +
                 '</div>' +
                 '<div class="lott-scan-status">Hold ticket 12-18 inches back</div>';
             return overlay;
@@ -350,7 +788,6 @@
                             var code = barcodes[0].rawValue;
                             if (code) {
                                 handleSuccessfulScan(code);
-                                return;
                             }
                         }
                         if (running) {

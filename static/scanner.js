@@ -555,17 +555,13 @@
 
         btn.dataset.originalText = btn.dataset.originalText || btn.textContent;
 
-        var hasScannedCount = 0;
+        var isSubmitting = false;
 
         function cleanupUI() {
             reader.innerHTML = '';
             reader.style.display = 'none';
             btn.textContent = btn.dataset.originalText || '📷 Scan with Camera';
             running = false;
-            if (hasScannedCount > 0) {
-                hasScannedCount = 0;
-                window.location.reload();
-            }
         }
 
         function stopCamera() {
@@ -595,18 +591,16 @@
         }
 
         function handleSuccessfulScan(decodedText) {
+            if (isSubmitting) return;
+
             var now = Date.now();
             decodedText = (decodedText || '').trim();
-            
-            // Prevent scanning the exact same ticket twice while the camera is open
-            if (lastScan.code === decodedText) {
-                return; 
-            }
-            
+
             var statusEl = reader.querySelector('.lott-scan-status');
 
-            // Pre-validation: Must be exactly 14 digits (IL Lottery Format)
-            if (decodedText.length !== 14 || !/^\d+$/.test(decodedText)) {
+            // Pre-validation: Allow valid lottery barcode lengths (11 to 32 digits)
+            var cleanText = decodedText.replace(/\D/g, '');
+            if (cleanText.length < 11 || cleanText.length > 32) {
                 lastScan.code = decodedText; // temporarily ignore this garbage string
                 lastScan.ts = now;
                 playErrorBeep();
@@ -622,9 +616,9 @@
                 return;
             }
 
+            isSubmitting = true;
             lastScan.code = decodedText;
             lastScan.ts = now;
-            hasScannedCount++;
 
             // Audio + Visual + Haptic feedback
             playScanBeep();
@@ -633,35 +627,26 @@
             var frame = reader.querySelector('.lott-scan-frame');
             if (frame) frame.classList.add('success');
 
-            var statusEl = reader.querySelector('.lott-scan-status');
             if (statusEl) {
-                statusEl.textContent = '✓ Scanned: ' + decodedText;
+                statusEl.textContent = '✓ Scanned! Submitting...';
                 statusEl.style.color = '#39ff14';
             }
 
-            var inputEl = document.getElementById(inputId);
+            var form = document.getElementById(formId);
+            var inputEl = document.getElementById(inputId) || (form ? form.querySelector('input[name="barcode"]') : null);
             if (inputEl) {
                 inputEl.value = decodedText;
             }
 
-            // Submit the form natively so the page reloads with flash messages
-            var form = document.getElementById(formId);
-            if (form) {
-                // Ensure the input field has the decoded text
-                var inputEl = document.getElementById(inputId) || form.querySelector('input[name="barcode"]');
-                if (inputEl) {
-                    inputEl.value = decodedText;
+            // Stop camera stream & submit form cleanly
+            setTimeout(function () {
+                stopCamera();
+                if (form) {
+                    var barInput = document.getElementById(inputId) || form.querySelector('input[name="barcode"]');
+                    if (barInput) barInput.value = decodedText;
+                    form.submit();
                 }
-                
-                // Provide visual feedback before reloading
-                if (statusEl) {
-                    statusEl.textContent = 'Submitting...';
-                    statusEl.style.color = '#39ff14';
-                }
-                
-                // Submit form
-                form.submit();
-            }
+            }, 300);
         }
 
         // Add visual overlay to container
