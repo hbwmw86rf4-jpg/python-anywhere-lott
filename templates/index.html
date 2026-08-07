@@ -163,9 +163,12 @@
                 targetId = 'returnBarcode';
             }
             var el = document.getElementById(targetId);
-            if (el) {
-                el.focus();
-                try { el.select(); } catch(e) {}
+            if (el && document.activeElement !== el) {
+                var tag = document.activeElement ? document.activeElement.tagName : '';
+                if (tag !== 'BUTTON' && tag !== 'A' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+                    el.focus();
+                    try { el.select(); } catch(e) {}
+                }
             }
         }
 
@@ -174,6 +177,14 @@
         window.addEventListener('pageshow', focusIndexInput);
         setTimeout(focusIndexInput, 50);
         setTimeout(focusIndexInput, 250);
+
+        document.addEventListener('click', function(e) {
+            var tag = e.target ? e.target.tagName : '';
+            if (tag !== 'BUTTON' && tag !== 'A' && tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+                focusIndexInput();
+            }
+        });
+        setInterval(focusIndexInput, 300);
     </script>
 </body>
 </html>

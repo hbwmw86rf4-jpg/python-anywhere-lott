@@ -608,10 +608,6 @@
                 if (statusEl) {
                     statusEl.textContent = '❌ Invalid Barcode (' + decodedText.length + ' chars)';
                     statusEl.style.color = '#ff4d4d';
-                    setTimeout(function() {
-                        statusEl.textContent = 'Hold ticket 12-18 inches back';
-                        statusEl.style.color = '#ffffff';
-                    }, 2000);
                 }
                 return;
             }

@@ -320,9 +320,12 @@
         {% else %}
         var el = document.getElementById('receive_barcode');
         {% endif %}
-        if (el) {
-            el.focus();
-            try { el.select(); } catch(e) {}
+        if (el && document.activeElement !== el) {
+            var tag = document.activeElement ? document.activeElement.tagName : '';
+            if (tag !== 'BUTTON' && tag !== 'A' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+                el.focus();
+                try { el.select(); } catch(e) {}
+            }
         }
     }
 
@@ -331,6 +334,14 @@
     window.addEventListener('pageshow', focusReceiveInput);
     setTimeout(focusReceiveInput, 50);
     setTimeout(focusReceiveInput, 250);
+
+    document.addEventListener('click', function(e) {
+        var tag = e.target ? e.target.tagName : '';
+        if (tag !== 'BUTTON' && tag !== 'A' && tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA') {
+            focusReceiveInput();
+        }
+    });
+    setInterval(focusReceiveInput, 300);
 </script>
 </body>
 </html>
