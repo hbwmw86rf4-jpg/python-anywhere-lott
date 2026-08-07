@@ -127,6 +127,17 @@ def pdf_to_bytes(pdf):
     return bytes(out)
 
 
+def pdf_safe(text):
+    """Sanitize string for FPDF standard fonts (Helvetica/Arial) by mapping common
+    Unicode characters (like em-dash, smart quotes) to ASCII equivalents."""
+    if text is None:
+        return ''
+    s = str(text)
+    s = s.replace('\u2014', '-').replace('\u2013', '-').replace('\u2018', "'").replace('\u2019', "'")
+    s = s.replace('\u201c', '"').replace('\u201d', '"').replace('\u2026', '...')
+    return s.encode('latin-1', errors='replace').decode('latin-1')
+
+
 def current_actor():
     """Best-effort name of whoever is performing an action, for the logs."""
     return session.get('cashier_name') or 'STAFF'
@@ -1265,14 +1276,14 @@ def export_shift():
 
     pdf.set_font("Arial", '', 8)
     for item in rec_data['items']:
-        slot_str = str(item['slot_label'] or item['slot_number'] or '—') if item['has_pack'] else '—'
+        slot_str = pdf_safe(str(item['slot_label'] or item['slot_number'] or '-') if item['has_pack'] else '-')
         pdf.cell(15, 6, slot_str, border=1)
-        pdf.cell(18, 6, str(item['game_number']), border=1)
-        pdf.cell(50, 6, str(item['name'])[:26], border=1)
+        pdf.cell(18, 6, pdf_safe(item['game_number']), border=1)
+        pdf.cell(50, 6, pdf_safe(item['name'])[:26], border=1)
         pdf.cell(18, 6, f"${item['price']:.2f}", border=1, align='R')
-        pdf.cell(32, 6, str(item['pack_id'])[:18], border=1)
-        pdf.cell(18, 6, str(item['beg_ticket_str']), border=1, align='C')
-        pdf.cell(18, 6, str(item['end_ticket_str']), border=1, align='C')
+        pdf.cell(32, 6, pdf_safe(item['pack_id'])[:18], border=1)
+        pdf.cell(18, 6, pdf_safe(item['beg_ticket_str']), border=1, align='C')
+        pdf.cell(18, 6, pdf_safe(item['end_ticket_str']), border=1, align='C')
         pdf.cell(12, 6, str(item['tickets_sold']), border=1, align='R')
         pdf.cell(19, 6, f"${item['revenue']:.2f}", border=1, align='R')
         pdf.ln()
@@ -1303,7 +1314,7 @@ def export_shift():
 
     def cashier_subtotal():
         pdf.set_font("Arial", 'B', 8)
-        pdf.cell(140, 7, f"Subtotal for {current_name}", border=1, align='R')
+        pdf.cell(140, 7, pdf_safe(f"Subtotal for {current_name}"), border=1, align='R')
         pdf.cell(20, 7, str(cashier_tickets), border=1, align='C')
         pdf.cell(30, 7, f"${cashier_total:.2f}", border=1, align='R')
         pdf.ln(8)
@@ -1317,17 +1328,18 @@ def export_shift():
             cashier_total = 0
             cashier_tickets = 0
             pdf.set_font("Arial", 'B', 10)
-            pdf.cell(0, 7, f"Cashier: {current_name}")
+            pdf.cell(0, 7, pdf_safe(f"Cashier: {current_name}"))
             pdf.ln(7)
             header_row()
 
         pdf.set_font("Arial", '', 8)
-        pdf.cell(35, 6, str(a['timestamp'])[:19], border=1)
-        pdf.cell(30, 6, str(a['pack_id'])[:16], border=1)
-        pdf.cell(55, 6, str(a['game_name'])[:28], border=1)
-        pdf.cell(20, 6, str(a['method'] or '')[:8], border=1, align='C')
+        pdf.cell(35, 6, pdf_safe(str(a['timestamp'])[:19]), border=1)
+        pdf.cell(30, 6, pdf_safe(str(a['pack_id'])[:16]), border=1)
+        pdf.cell(55, 6, pdf_safe(str(a['game_name'])[:28]), border=1)
+        pdf.cell(20, 6, pdf_safe(str(a['method'] or '')[:8]), border=1, align='C')
         pdf.cell(20, 6, str(a['tickets_sold']), border=1, align='C')
         pdf.cell(30, 6, f"${a['cash_expected']:.2f}", border=1, align='R')
+        pdf.ln()
         pdf.ln()
 
         cashier_total += a['cash_expected'] or 0
@@ -1636,14 +1648,14 @@ def shift_reconciliation_pdf():
     # Table Rows
     pdf.set_font("Arial", '', 9)
     for item in data['items']:
-        slot_str = str(item['slot_label'] or item['slot_number'] or '—') if item['has_pack'] else '—'
+        slot_str = pdf_safe(str(item['slot_label'] or item['slot_number'] or '-') if item['has_pack'] else '-')
         pdf.cell(20, 7, slot_str, border=1)
-        pdf.cell(22, 7, str(item['game_number']), border=1)
-        pdf.cell(65, 7, str(item['name'])[:30], border=1)
+        pdf.cell(22, 7, pdf_safe(item['game_number']), border=1)
+        pdf.cell(65, 7, pdf_safe(item['name'])[:30], border=1)
         pdf.cell(22, 7, f"${item['price']:.2f}", border=1, align='R')
-        pdf.cell(42, 7, str(item['pack_id'])[:22], border=1)
-        pdf.cell(22, 7, str(item['beg_ticket_str']), border=1, align='C')
-        pdf.cell(22, 7, str(item['end_ticket_str']), border=1, align='C')
+        pdf.cell(42, 7, pdf_safe(item['pack_id'])[:22], border=1)
+        pdf.cell(22, 7, pdf_safe(item['beg_ticket_str']), border=1, align='C')
+        pdf.cell(22, 7, pdf_safe(item['end_ticket_str']), border=1, align='C')
         pdf.cell(22, 7, str(item['tickets_sold']), border=1, align='R')
         pdf.cell(28, 7, f"${item['revenue']:.2f}", border=1, align='R')
         pdf.ln()
@@ -1651,17 +1663,7 @@ def shift_reconciliation_pdf():
     # Digital Verification Badge
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 8, f"Digital Audit Record - Logged by {session.get('cashier_name', 'Staff')} on {data['timestamp']}", align='C')
-    pdf.ln(8)
-
-    filename = f"Shift_Reconciliation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    return Response(pdf_to_bytes(pdf), mimetype="application/pdf",
-                    headers={"Content-disposition": f"attachment; filename={filename}"})
-
-    # Digital Verification Badge
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 8, f"Digital Audit Record - Logged by {session.get('cashier_name', 'Staff')} on {data['timestamp']}", align='C')
+    pdf.cell(0, 8, pdf_safe(f"Digital Audit Record - Logged by {session.get('cashier_name', 'Staff')} on {data['timestamp']}"), align='C')
     pdf.ln(8)
 
     filename = f"Shift_Reconciliation_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
